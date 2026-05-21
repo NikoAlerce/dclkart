@@ -1,6 +1,6 @@
 import {
   engine, Transform, GltfContainer, ColliderLayer,
-  MeshCollider, Raycast, RaycastQueryType,
+  MeshCollider, MeshRenderer, Material, Raycast, RaycastQueryType,
   pointerEventsSystem, InputAction, InputModifier,
   AvatarModifierArea, AvatarModifierType,
   VirtualCamera, MainCamera,
@@ -47,6 +47,22 @@ export function createKart(config: KartConfig): number {
     position: Vector3.create(0, 0.4, 0),
     rotation: Quaternion.fromEulerDegrees(0, -90, 0),
     scale:    Vector3.create(1.25, 1.25, 1.25)
+  })
+
+  // ── TEST: Caja roja primitiva del SDK ─────────────────────────────
+  // Si esta caja aparece ROJA en DCL → el renderer funciona, el problema es el GLB.
+  // Si aparece BLANCA → hay algo en el renderer/syncEntity que anula colores.
+  const testBox = engine.addEntity()
+  MeshRenderer.setBox(testBox)
+  Material.setPbrMaterial(testBox, {
+    albedoColor: Color4.create(1, 0, 0, 1),
+    roughness:   0.9,
+    metallic:    0
+  })
+  Transform.create(testBox, {
+    parent:   kartEntity,
+    position: Vector3.create(0, 1.5, 0),  // 1.5m arriba del kart, bien visible
+    scale:    Vector3.create(0.5, 0.5, 0.5)
   })
 
   // ── Caja de colisión con tamaño real del kart ───────────────────────────
