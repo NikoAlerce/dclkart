@@ -13,6 +13,7 @@ import { myProfile } from '@dcl/sdk/network'
 import { KartData, KartOwner } from './components'
 import { RaceState } from './raceState'
 import type { KartConfig } from './kartConfig'
+import { DEFAULT_PHYSICS } from './kartConfig'
 
 // ─── Estacionamiento del avatar ───────────────────────────────────────────────
 // El avatar se teletransporta aquí al subirse. Alto (Y=100) para que
@@ -64,12 +65,13 @@ export function createKart(config: KartConfig): number {
   MeshCollider.setBox(kartCollider, ColliderLayer.CL_PHYSICS | ColliderLayer.CL_POINTER)
 
   // ── Datos de físicas iniciales ──────────────────────────────────────────
+  // Usa los parámetros del config si están definidos, si no los defaults estándar.
   KartData.create(kartEntity, {
     currentSpeed:   0,
-    maxSpeed:       32,
-    acceleration:   20,
-    friction:       0.8,
-    turnSpeed:      75,
+    maxSpeed:       config.maxSpeed     ?? DEFAULT_PHYSICS.maxSpeed,
+    acceleration:   config.acceleration ?? DEFAULT_PHYSICS.acceleration,
+    friction:       config.friction     ?? DEFAULT_PHYSICS.friction,
+    turnSpeed:      config.turnSpeed    ?? DEFAULT_PHYSICS.turnSpeed,
     isOccupied:     false,
     isDrifting:     false,
     driftTime:      0,
