@@ -1879,7 +1879,7 @@
     "nearbyVoiceChat": "enabled"
   },
   "skyboxConfig": {
-    "fixedTime": 39600
+    "fixedTime": 43200
   },
   "worldConfiguration": {
     "name": "nikoalerce.dcl.eth"
