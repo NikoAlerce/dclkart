@@ -260,7 +260,8 @@ export function kartMovementSystem(dt: number) {
         )
         if (validHits.length > 0) {
           validHits.sort((a, b) => (a.length ?? Infinity) - (b.length ?? Infinity))
-          const KART_ROOF_Y = transform.position.y + 1.5
+          const scaleMult = mutableKart.scale || 1.0
+          const KART_ROOF_Y = transform.position.y + 1.5 * scaleMult
           for (const hit of validHits) {
             if (hit.position && hit.position.y <= KART_ROOF_Y) {
               lastKnownGroundY = hit.position.y
@@ -321,11 +322,12 @@ export function kartMovementSystem(dt: number) {
           const normalY = closestWallHit.normalHit ? Math.abs(closestWallHit.normalHit.y) : 1
           const isWall = normalY < 0.9
 
-          if (isWall && closestWallHit.length != null && closestWallHit.length < 2.5) {
+          const scaleMult = mutableKart.scale || 1.0
+          if (isWall && closestWallHit.length != null && closestWallHit.length < 2.5 * scaleMult) {
             mutableKart.currentSpeed = -mutableKart.currentSpeed * 0.35
             const bwd = Vector3.rotate(Vector3.Backward(), transform.rotation)
-            transform.position.x += bwd.x * 0.8
-            transform.position.z += bwd.z * 0.8
+            transform.position.x += bwd.x * 0.8 * scaleMult
+            transform.position.z += bwd.z * 0.8 * scaleMult
             bounceCooldown = BOUNCE_COOLDOWN
             
             leanVelocity = 0
@@ -437,7 +439,8 @@ export function kartMovementSystem(dt: number) {
     transform.position.z = Math.max(2, Math.min(494, transform.position.z + moveZ))
 
     // ── 7. GRAVEDAD ───────────────────────────────────────────────────────
-    const targetY = lastKnownGroundY + 0.05
+    const scaleMult = mutableKart.scale || 1.0
+    const targetY = lastKnownGroundY + 0.05 * scaleMult
     if (isGrounded) {
       transform.position.y += (targetY - transform.position.y) * 0.6
     } else {
@@ -558,27 +561,28 @@ export function kartMovementSystem(dt: number) {
     if (mutableKart.cameraPivotEntity) {
       const camT = Transform.getMutableOrNull(mutableKart.cameraPivotEntity as any)
       if (camT) {
+        const scaleMult = mutableKart.scale || 1.0
         const backVec = Vector3.rotate(Vector3.Backward(), transform.rotation)
         const fwdVec  = Vector3.rotate(Vector3.Forward(),  transform.rotation)
 
-        // Distancia dinámica: 7m quieto → 10m a max speed (efecto zoom-out de FOV)
-        const camDist   = 7.0 + sf * 3.0
-        // Pull-back extra durante boost: la cámara retrocede al arrancar
-        const boostPull = mutableKart.boostTime > 0 ? mutableKart.boostTime * 1.5 : 0
+        // Distancia dinámica escalada
+        const camDist   = (7.0 + sf * 3.0) * scaleMult
+        // Pull-back extra durante boost escalado
+        const boostPull = mutableKart.boostTime > 0 ? mutableKart.boostTime * 1.5 * scaleMult : 0
 
         const idealPos  = Vector3.create(
           transform.position.x + backVec.x * (camDist + boostPull),
-          transform.position.y + 3.2 + sf * 0.8,
+          transform.position.y + (3.2 + sf * 0.8) * scaleMult,
           transform.position.z + backVec.z * (camDist + boostPull)
         )
         const posFactor = Math.min(1, dt * 4.5)
         camT.position   = lerpV3(camT.position, idealPos, posFactor)
 
-        // Look-ahead: a alta velocidad la cámara mira hacia adelante del kart
+        // Look-ahead escalado: la cámara mira hacia adelante del kart
         const lookTarget = Vector3.create(
-          transform.position.x + fwdVec.x * sf * 3.0,
-          transform.position.y + 1.0,
-          transform.position.z + fwdVec.z * sf * 3.0
+          transform.position.x + fwdVec.x * sf * 3.0 * scaleMult,
+          transform.position.y + 1.0 * scaleMult,
+          transform.position.z + fwdVec.z * sf * 3.0 * scaleMult
         )
         const targetRot = computeLookAt(camT.position, lookTarget)
         const rotFactor = Math.min(1, dt * 8.0)

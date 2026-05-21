@@ -35,6 +35,8 @@ export function createKart(config: KartConfig): number {
     scale:    Vector3.create(1, 1, 1)
   })
 
+  const scaleMult = config.scale ?? 1.0
+
   // ── Modelo visual (hijo con corrección de orientación) ──────────────────
   const kartModel = engine.addEntity()
   GltfContainer.create(kartModel, {
@@ -44,9 +46,9 @@ export function createKart(config: KartConfig): number {
   })
   Transform.create(kartModel, {
     parent:   kartEntity,
-    position: Vector3.create(0, 0.4, 0),
+    position: Vector3.create(0, 0.4 * scaleMult, 0),
     rotation: Quaternion.fromEulerDegrees(0, -90, 0),
-    scale:    Vector3.create(1.25, 1.25, 1.25)
+    scale:    Vector3.create(1.25 * scaleMult, 1.25 * scaleMult, 1.25 * scaleMult)
   })
 
   // ── Caja de colisión con tamaño real del kart ───────────────────────────
@@ -56,8 +58,8 @@ export function createKart(config: KartConfig): number {
   const kartCollider = engine.addEntity()
   Transform.create(kartCollider, {
     parent:   kartEntity,
-    position: Vector3.create(0, 0.45, 0),          // centro de masa del kart
-    scale:    Vector3.create(1.5, 0.9, 2.5)        // ancho, alto, largo
+    position: Vector3.create(0, 0.45 * scaleMult, 0),          // centro de masa del kart
+    scale:    Vector3.create(1.5 * scaleMult, 0.9 * scaleMult, 2.5 * scaleMult)        // ancho, alto, largo
   })
   MeshCollider.setBox(kartCollider, ColliderLayer.CL_PHYSICS | ColliderLayer.CL_POINTER)
 
@@ -77,7 +79,8 @@ export function createKart(config: KartConfig): number {
     lastSafeY:    config.spawnPos.y,
     lastSafeZ:    config.spawnPos.z,
     lastSafeRotY: config.spawnRotY,
-    modelEntity:  kartModel
+    modelEntity:  kartModel,
+    scale:        scaleMult
   })
 
   // ── KartOwner: libre al inicio ───────────────────────────────────────────
@@ -150,9 +153,9 @@ export function createKart(config: KartConfig): number {
       const cameraPivot = engine.addEntity()
       Transform.create(cameraPivot, {
         position: Vector3.create(
-          kartTransform.position.x + bwd.x * 7.0,
-          kartTransform.position.y + 3.2,
-          kartTransform.position.z + bwd.z * 7.0
+          kartTransform.position.x + bwd.x * 7.0 * scaleMult,
+          kartTransform.position.y + 3.2 * scaleMult,
+          kartTransform.position.z + bwd.z * 7.0 * scaleMult
         ),
         rotation: kartTransform.rotation
       })
@@ -164,11 +167,11 @@ export function createKart(config: KartConfig): number {
       const floorSensor = engine.addEntity()
       Transform.create(floorSensor, {
         parent:   kartEntity,
-        position: Vector3.create(0, 4.0, 0)
+        position: Vector3.create(0, 4.0 * scaleMult, 0)
       })
       Raycast.createOrReplace(floorSensor, {
         direction:     { $case: 'globalDirection', globalDirection: Vector3.create(0, -1, 0) },
-        maxDistance:   20.0,
+        maxDistance:   20.0 * scaleMult,
         queryType:     RaycastQueryType.RQT_QUERY_ALL,
         continuous:    true,
         collisionMask: ColliderLayer.CL_PHYSICS
@@ -179,11 +182,11 @@ export function createKart(config: KartConfig): number {
       const wallSensor = engine.addEntity()
       Transform.create(wallSensor, {
         parent:   kartEntity,
-        position: Vector3.create(0, 0.5, 1.0)
+        position: Vector3.create(0, 0.5 * scaleMult, 1.0 * scaleMult)
       })
       Raycast.createOrReplace(wallSensor, {
         direction:     { $case: 'localDirection', localDirection: Vector3.create(0, 0, 1) },
-        maxDistance:   2.5,
+        maxDistance:   2.5 * scaleMult,
         queryType:     RaycastQueryType.RQT_QUERY_ALL,
         continuous:    true,
         collisionMask: ColliderLayer.CL_PHYSICS   // detecta paredes Y otros karts
@@ -194,7 +197,7 @@ export function createKart(config: KartConfig): number {
       const sparkEntity = engine.addEntity()
       Transform.create(sparkEntity, {
         parent:   kartEntity,
-        position: Vector3.create(0, 0.15, -0.9)
+        position: Vector3.create(0, 0.15 * scaleMult, -0.9 * scaleMult)
       })
       ParticleSystem.create(sparkEntity, {
         active:       false,

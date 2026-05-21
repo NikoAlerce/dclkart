@@ -6,6 +6,7 @@ export interface KartConfig {
   modelPath:  string    // ruta al .glb dentro del proyecto
   spawnPos:   Vector3   // posición de largada en el mundo
   spawnRotY:  number    // rotación Y en grados (todos miran al mismo lado)
+  scale?:     number    // multiplicador de escala opcional (por defecto 1.0)
 }
 
 // ─── Geometría de la grilla de largada ───────────────────────────────────────
@@ -51,9 +52,9 @@ function kartPos(row: number, col: number): Vector3 {
 export const KART_CONFIGS: KartConfig[] = [
   // ── Fila delantera (1-5) ──────────────────────────────────────────────────
   { id: 1,  modelPath: 'assets/models/kart.glb',  spawnPos: kartPos(0, 0), spawnRotY: ROT_Y },
-  { id: 2,  modelPath: 'assets/models/kart2.glb', spawnPos: kartPos(0, 1), spawnRotY: ROT_Y },
-  { id: 3,  modelPath: 'assets/models/kart3.glb', spawnPos: kartPos(0, 2), spawnRotY: ROT_Y },
-  { id: 4,  modelPath: 'assets/models/kart4.glb', spawnPos: kartPos(0, 3), spawnRotY: ROT_Y },
+  { id: 2,  modelPath: 'assets/models/kart2.glb', spawnPos: kartPos(0, 1), spawnRotY: ROT_Y, scale: 3.0 },
+  { id: 3,  modelPath: 'assets/models/kart3.glb', spawnPos: kartPos(0, 2), spawnRotY: ROT_Y, scale: 3.0 },
+  { id: 4,  modelPath: 'assets/models/kart4.glb', spawnPos: kartPos(0, 3), spawnRotY: ROT_Y, scale: 3.0 },
   { id: 5,  modelPath: 'assets/models/kart5.glb', spawnPos: kartPos(0, 4), spawnRotY: ROT_Y },
   // ── Fila trasera (6-10) ───────────────────────────────────────────────────
   { id: 6,  modelPath: 'assets/models/kart6.glb', spawnPos: kartPos(1, 0), spawnRotY: ROT_Y },

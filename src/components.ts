@@ -28,7 +28,8 @@ export const KartData = engine.defineComponent('KartData', {
   floorSensorEntity:  Schemas.Optional(Schemas.Entity),
   wallSensorEntity:   Schemas.Optional(Schemas.Entity),
   sparkEntity:        Schemas.Optional(Schemas.Entity),
-  hideAreaEntity:     Schemas.Optional(Schemas.Entity)
+  hideAreaEntity:     Schemas.Optional(Schemas.Entity),
+  scale:              Schemas.Float
 })
 
 // ─── KartOwner: quién está manejando este kart (sincronizado en red) ──────────
