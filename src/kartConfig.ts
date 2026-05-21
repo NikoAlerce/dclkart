@@ -7,6 +7,7 @@ export interface KartConfig {
   spawnPos:     Vector3   // posición de largada en el mundo
   spawnRotY:    number    // rotación Y en grados (todos miran al mismo lado)
   scale?:       number    // multiplicador de escala visual/física (por defecto 1.0)
+  vehicleType?: 'kart' | 'ship'  // 'ship' = modo nave: sin gravedad, E/Q para subir/bajar
 
   // ── Parámetros de manejo individuales (todos opcionales) ──────────────────
   // Si no los ponés, se usan los valores por defecto del kart estándar.
@@ -81,7 +82,9 @@ export const KART_CONFIGS: KartConfig[] = [
   // ── Fila delantera (1-5) ──────────────────────────────────────────────────
   { id: 1,  modelPath: 'assets/models/kart.glb',  spawnPos: kartPos(0, 0), spawnRotY: ROT_Y },
   { id: 2,  modelPath: 'assets/models/kart2.glb', spawnPos: kartPos(0, 1), spawnRotY: ROT_Y, scale: 1.5 },
-  { id: 3,  modelPath: 'assets/models/kart3.glb', spawnPos: kartPos(0, 2), spawnRotY: ROT_Y, scale: 1.5 },
+  { id: 3,  modelPath: 'assets/models/kart3.glb', spawnPos: kartPos(0, 2), spawnRotY: ROT_Y, scale: 1.5,
+    vehicleType: 'ship',
+    maxSpeed: 48, acceleration: 28, friction: 0.55, turnSpeed: 95 },
   { id: 4,  modelPath: 'assets/models/kart4.glb', spawnPos: kartPos(0, 3), spawnRotY: ROT_Y, scale: 1.5 },
   { id: 5,  modelPath: 'assets/models/kart5.glb', spawnPos: kartPos(0, 4), spawnRotY: ROT_Y },
   // ── Fila trasera (6-10) ───────────────────────────────────────────────────

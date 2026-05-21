@@ -116,12 +116,14 @@ export function kartMovementSystem(dt: number) {
 
   // ── Inputs ────────────────────────────────────────────────────────────────
   InputState.tick++
-  InputState.forward  = inputSystem.isPressed(InputAction.IA_FORWARD)
-  InputState.backward = inputSystem.isPressed(InputAction.IA_BACKWARD)
-  InputState.left     = inputSystem.isPressed(InputAction.IA_LEFT)
-  InputState.right    = inputSystem.isPressed(InputAction.IA_RIGHT)
-  InputState.drift    = inputSystem.isPressed(InputAction.IA_JUMP)
-  InputState.exit     = inputSystem.isTriggered(InputAction.IA_PRIMARY, PointerEventType.PET_DOWN)
+  InputState.forward     = inputSystem.isPressed(InputAction.IA_FORWARD)
+  InputState.backward    = inputSystem.isPressed(InputAction.IA_BACKWARD)
+  InputState.left        = inputSystem.isPressed(InputAction.IA_LEFT)
+  InputState.right       = inputSystem.isPressed(InputAction.IA_RIGHT)
+  InputState.drift       = inputSystem.isPressed(InputAction.IA_JUMP)
+  InputState.exit        = inputSystem.isTriggered(InputAction.IA_PRIMARY, PointerEventType.PET_DOWN)
+  InputState.thrustUp    = inputSystem.isPressed(InputAction.IA_ACTION_3)   // E
+  InputState.thrustDown  = inputSystem.isPressed(InputAction.IA_ACTION_4)   // Q
 
   // ── Inercia del volante ───────────────────────────────────────────────────
   // rawSteering: señal binaria ±1 del input real
@@ -244,6 +246,138 @@ export function kartMovementSystem(dt: number) {
       coyoteFrames             = 0
       lastKnownGroundY         = mutableKart.lastSafeY
       continue
+    }
+
+    // ── MODO NAVE ─────────────────────────────────────────────────────────
+    // Las naves ignoran la gravedad, no usan sensores de piso/pared, y
+    // pueden moverse libremente en los 3 ejes con E (subir) y Q (bajar).
+    if (mutableKart.vehicleType === 'ship') {
+      const scaleMult = mutableKart.scale || 1.0
+      const sf = Math.abs(mutableKart.currentSpeed) / mutableKart.maxSpeed
+
+      // ── Velocidad horizontal (W/S) con inercia ─────────────────────────
+      const speedRatio   = Math.abs(mutableKart.currentSpeed) / mutableKart.maxSpeed
+      const dynamicAccel = mutableKart.acceleration * (1.0 - speedRatio * 0.45)
+
+      if (InputState.forward) {
+        mutableKart.currentSpeed += dynamicAccel * dt
+      } else if (InputState.backward) {
+        mutableKart.currentSpeed -= mutableKart.acceleration * 1.2 * dt
+      } else {
+        // Fricción baja = la nave desliza, no frena bruscamente
+        mutableKart.currentSpeed *= (1 - mutableKart.friction * dt)
+      }
+
+      // Boost post-drift también aplica en naves
+      if (mutableKart.boostTime > 0) {
+        mutableKart.boostTime -= dt
+        const boostCap = mutableKart.maxSpeed * 1.35
+        mutableKart.currentSpeed = Math.min(mutableKart.currentSpeed + 55 * dt, boostCap)
+      }
+
+      const boostCap    = mutableKart.maxSpeed * 1.35
+      const MAX_REVERSE = -(mutableKart.maxSpeed * 0.3)
+      if (mutableKart.currentSpeed > boostCap)    mutableKart.currentSpeed = boostCap
+      if (mutableKart.currentSpeed < MAX_REVERSE) mutableKart.currentSpeed = MAX_REVERSE
+      if (Math.abs(mutableKart.currentSpeed) < 0.05) mutableKart.currentSpeed = 0
+
+      // ── Giro (A/D) — igual que kart, eje Y ────────────────────────────
+      if (mutableKart.currentSpeed !== 0 && Math.abs(currentSteering) > 0.02) {
+        const sfTurn  = Math.abs(mutableKart.currentSpeed) / mutableKart.maxSpeed
+        const dynTurn = mutableKart.turnSpeed * (1.8 - sfTurn * 0.3)
+        const revMod  = mutableKart.currentSpeed < 0 ? -1 : 1
+        const rotDelta = Quaternion.fromEulerDegrees(0, currentSteering * dynTurn * revMod * dt, 0)
+        transform.rotation = Quaternion.multiply(transform.rotation, rotDelta)
+      }
+
+      // Normalizar al eje Y (evita pitch/roll acumulado)
+      const qShip = transform.rotation
+      const yawShip = Math.atan2(2 * (qShip.w * qShip.y + qShip.x * qShip.z), 1 - 2 * (qShip.y * qShip.y + qShip.z * qShip.z))
+      transform.rotation = Quaternion.fromEulerDegrees(0, yawShip * (180 / Math.PI), 0)
+
+      // ── Movimiento horizontal ──────────────────────────────────────────
+      const fwdShip = Vector3.rotate(Vector3.Forward(), transform.rotation)
+      transform.position.x = Math.max(2, Math.min(942, transform.position.x + fwdShip.x * mutableKart.currentSpeed * dt))
+      transform.position.z = Math.max(2, Math.min(494, transform.position.z + fwdShip.z * mutableKart.currentSpeed * dt))
+
+      // ── Empuje Vertical E/Q ───────────────────────────────────────────
+      const SHIP_VERT_ACCEL  = 14.0  // aceleración vertical m/s²
+      const SHIP_VERT_MAX    = 12.0  // velocidad vertical máxima
+      const SHIP_VERT_DRAG   = 0.85  // amortiguación al soltar
+
+      if (InputState.thrustUp) {
+        mutableKart.shipVertSpeed = Math.min(SHIP_VERT_MAX, mutableKart.shipVertSpeed + SHIP_VERT_ACCEL * dt)
+      } else if (InputState.thrustDown) {
+        mutableKart.shipVertSpeed = Math.max(-SHIP_VERT_MAX, mutableKart.shipVertSpeed - SHIP_VERT_ACCEL * dt)
+      } else {
+        // Desacelerar verticalmente con drag cuando no se presiona nada
+        mutableKart.shipVertSpeed *= (1 - SHIP_VERT_DRAG * dt)
+        if (Math.abs(mutableKart.shipVertSpeed) < 0.05) mutableKart.shipVertSpeed = 0
+      }
+
+      // Altura mínima: la nave no puede atravesar el suelo
+      const minY = (lastKnownGroundY || 5.0) + 1.5 * scaleMult
+      transform.position.y = Math.max(minY, transform.position.y + mutableKart.shipVertSpeed * dt)
+
+      // Guardar checkpoint seguro
+      checkpointTimer += dt
+      if (checkpointTimer >= 1.0) {
+        checkpointTimer = 0
+        mutableKart.lastSafeX    = transform.position.x
+        mutableKart.lastSafeY    = transform.position.y
+        mutableKart.lastSafeZ    = transform.position.z
+        mutableKart.lastSafeRotY = yawShip * (180 / Math.PI)
+      }
+
+      // Sincronizar avatar para el minimapa
+      avatarSyncTimer += dt
+      if (avatarSyncTimer >= AVATAR_SYNC_INTERVAL) {
+        avatarSyncTimer = 0
+        const fwd2 = Vector3.rotate(Vector3.Forward(), transform.rotation)
+        movePlayerTo({
+          newRelativePosition: Vector3.create(transform.position.x, transform.position.y, transform.position.z),
+          cameraTarget: Vector3.create(transform.position.x + fwd2.x * 5, transform.position.y + 1, transform.position.z + fwd2.z * 5)
+        }).catch(() => {})
+      }
+
+      // ── Lean visual (roll lateral) en curvas ─────────────────────────
+      const sfLean = Math.abs(mutableKart.currentSpeed) / mutableKart.maxSpeed
+      const targetLean = -currentSteering * sfLean * MAX_TURN_LEAN * 2.2  // naves inclinan más
+      leanVelocity += (-LEAN_STIFFNESS * (leanAngle - targetLean) - LEAN_DAMPING * leanVelocity) * dt
+      leanAngle    += leanVelocity * dt
+
+      if (mutableKart.modelEntity) {
+        const modelT = Transform.getMutableOrNull(mutableKart.modelEntity as any)
+        if (modelT) {
+          const q_base = Quaternion.fromEulerDegrees(0, -90, 0)
+          const q_lean = Quaternion.fromEulerDegrees(leanAngle, 0, 0)
+          modelT.rotation = Quaternion.multiply(q_base, q_lean)
+        }
+      }
+
+      // ── Cámara de nave (más alta y alejada) ───────────────────────────
+      if (mutableKart.cameraPivotEntity) {
+        const camT = Transform.getMutableOrNull(mutableKart.cameraPivotEntity as any)
+        if (camT) {
+          const backVec = Vector3.rotate(Vector3.Backward(), transform.rotation)
+          const fwdVec  = Vector3.rotate(Vector3.Forward(),  transform.rotation)
+          const camDist   = (9.0 + sfLean * 4.0) * scaleMult
+          const idealPos  = Vector3.create(
+            transform.position.x + backVec.x * camDist,
+            transform.position.y + 4.5 * scaleMult,
+            transform.position.z + backVec.z * camDist
+          )
+          camT.position = lerpV3(camT.position, idealPos, Math.min(1, dt * 4.0))
+          const lookTarget = Vector3.create(
+            transform.position.x + fwdVec.x * sfLean * 4.0 * scaleMult,
+            transform.position.y + 1.0 * scaleMult,
+            transform.position.z + fwdVec.z * sfLean * 4.0 * scaleMult
+          )
+          camT.rotation = nlerp(camT.rotation, computeLookAt(camT.position, lookTarget), Math.min(1, dt * 7.0))
+        }
+      }
+
+      continue  // skip kart-only physics below
     }
 
     // ── 1. SENSOR DE PISO ─────────────────────────────────────────────────

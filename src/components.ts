@@ -29,7 +29,9 @@ export const KartData = engine.defineComponent('KartData', {
   wallSensorEntity:   Schemas.Optional(Schemas.Entity),
   sparkEntity:        Schemas.Optional(Schemas.Entity),
   hideAreaEntity:     Schemas.Optional(Schemas.Entity),
-  scale:              Schemas.Float
+  scale:              Schemas.Float,
+  vehicleType:        Schemas.String,   // 'kart' | 'ship'
+  shipVertSpeed:      Schemas.Float     // velocidad vertical actual en modo nave
 })
 
 // ─── KartOwner: quién está manejando este kart (sincronizado en red) ──────────

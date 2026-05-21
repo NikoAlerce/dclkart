@@ -14,21 +14,25 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type KartInputPayload = {
-  forward:  boolean
-  backward: boolean
-  left:     boolean
-  right:    boolean
-  drift:    boolean   // Barra espaciadora — activa drift
-  exit:     boolean
-  tick:     number
+  forward:    boolean
+  backward:   boolean
+  left:       boolean
+  right:      boolean
+  drift:      boolean   // Barra espaciadora — activa drift
+  exit:       boolean
+  thrustUp:   boolean   // E — subir (modo nave)
+  thrustDown: boolean   // Q — bajar (modo nave)
+  tick:       number
 }
 
 export const InputState: KartInputPayload = {
-  forward:  false,
-  backward: false,
-  left:     false,
-  right:    false,
-  drift:    false,
-  exit:     false,
-  tick:     0
+  forward:    false,
+  backward:   false,
+  left:       false,
+  right:      false,
+  drift:      false,
+  exit:       false,
+  thrustUp:   false,
+  thrustDown: false,
+  tick:       0
 }

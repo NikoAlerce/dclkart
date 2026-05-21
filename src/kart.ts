@@ -82,7 +82,9 @@ export function createKart(config: KartConfig): number {
     lastSafeZ:    config.spawnPos.z,
     lastSafeRotY: config.spawnRotY,
     modelEntity:  kartModel,
-    scale:        scaleMult
+    scale:        scaleMult,
+    vehicleType:  config.vehicleType ?? 'kart',
+    shipVertSpeed: 0
   })
 
   // ── KartOwner: libre al inicio ───────────────────────────────────────────
