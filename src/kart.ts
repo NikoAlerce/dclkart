@@ -83,13 +83,6 @@ export function createKart(config: KartConfig): number {
   // ── KartOwner: libre al inicio ───────────────────────────────────────────
   KartOwner.create(kartEntity, { ownerId: '' })
 
-  // ── Glow neon (estética premium) ─────────────────────────────────────────
-  LightSource.create(kartEntity, {
-    color:     Color3.create(0.2, 0.8, 1.0),
-    intensity: 2,
-    range:     10
-  })
-
   // ── Sincronización multijugador ──────────────────────────────────────────
   // Transform: todos los jugadores ven el kart moverse en tiempo real.
   // KartOwner: todos saben quién está manejando (para bloquear el clic).
