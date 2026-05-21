@@ -2,7 +2,6 @@ import ReactEcs, { Label, ReactEcsRenderer, UiEntity } from '@dcl/sdk/react-ecs'
 import { Color4 } from '@dcl/sdk/math'
 import { InputState } from './inputState'
 import { RaceState, RacePhase } from './raceState'
-import { SpeedEffects } from './speedEffects'
 
 export function setupUi() {
   ReactEcsRenderer.setUiRenderer(uiComponent)
@@ -12,46 +11,6 @@ const uiComponent = () => (
   <UiEntity
     uiTransform={{ width: '100%', height: '100%', flexDirection: 'column' }}
   >
-    {/* ── SPEED LINES OVERLAY ─────────────────────────────────────── */}
-    {/* Aparece suavemente por encima del 55% de velocidad máxima.       */}
-    {/* A mayor velocidad / boost = más opaco. El fondo negro a baja     */}
-    {/* opacidad crea una viguñeta extra que potencia la sensación.       */}
-    {SpeedEffects.speedFactor > 0.55 && (
-      <UiEntity
-        uiTransform={{
-          positionType: 'absolute',
-          position: { top: 0, left: 0 },
-          width: '100%',
-          height: '100%',
-        }}
-        uiBackground={{
-          texture: { src: 'images/speed_lines.png' },
-          textureMode: 'stretch',
-          color: Color4.create(
-            1, 1, 1,
-            SpeedEffects.boostActive
-              ? Math.min(0.55, 0.3 + SpeedEffects.speedFactor * 0.25)  // más intenso en boost
-              : (SpeedEffects.speedFactor - 0.55) / 0.45 * 0.28        // 0 → 0.28 gradual
-          ),
-        }}
-      />
-    )}
-
-    {/* ── BOOST FLASH (destello dorado al activar boost) ─────────────── */}
-    {/* Dura ~0.18s. Da el punch instantáneo del mini-turbo. */}
-    {SpeedEffects.boostFlash > 0.01 && (
-      <UiEntity
-        uiTransform={{
-          positionType: 'absolute',
-          position: { top: 0, left: 0 },
-          width: '100%',
-          height: '100%',
-        }}
-        uiBackground={{
-          color: Color4.create(1, 0.8, 0.1, SpeedEffects.boostFlash * 0.55),
-        }}
-      />
-    )}
     {/* ── CENTRAL SPLASH SCREENS (COUNTDOWN & FINISH) ── */}
     {RaceState.phase === RacePhase.COUNTDOWN && (
       <UiEntity
