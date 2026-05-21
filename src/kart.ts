@@ -19,8 +19,11 @@ import type { KartConfig } from './kartConfig'
 // el collider del avatar no interfiera con la pista.
 const PARKING_SPOT = Vector3.create(472, 100, 248)
 
-// ─── Mapa global: entity → config.id  (para que kartSystem pueda leer el id) ──
-export const kartEntityToId = new Map<number, number>()
+// ─── Mapas globales ───────────────────────────────────────────────────────────
+// entity → enumId de red
+export const kartEntityToId  = new Map<number, number>()
+// entity → entidad hija que tiene el MeshCollider (para delete/restore)
+export const kartColliderMap = new Map<number, number>()
 
 export function createKart(config: KartConfig): number {
   const kartEntity = engine.addEntity()
@@ -46,10 +49,17 @@ export function createKart(config: KartConfig): number {
     scale:    Vector3.create(1.25, 1.25, 1.25)
   })
 
-  // ── Collider doble: PHYSICS (choque kart-kart) + POINTER (hover/click) ──
-  // CL_PHYSICS: los raycasts de otros karts chocan contra este kart.
-  // CL_POINTER: muestra el texto "Subirse al Kart" al acercarse.
-  MeshCollider.setBox(kartEntity, ColliderLayer.CL_PHYSICS | ColliderLayer.CL_POINTER)
+  // ── Caja de colisión con tamaño real del kart ───────────────────────────
+  // El kart visual mide aprox. 2.5m largo × 1.5m ancho × 0.9m alto.
+  // Usamos una entidad hija con esa escala para que el jugador no lo atraviese
+  // y para que los raycasts de otros karts rebotan correctamente.
+  const kartCollider = engine.addEntity()
+  Transform.create(kartCollider, {
+    parent:   kartEntity,
+    position: Vector3.create(0, 0.45, 0),          // centro de masa del kart
+    scale:    Vector3.create(1.5, 0.9, 2.5)        // ancho, alto, largo
+  })
+  MeshCollider.setBox(kartCollider, ColliderLayer.CL_PHYSICS | ColliderLayer.CL_POINTER)
 
   // ── Datos de físicas iniciales ──────────────────────────────────────────
   KartData.create(kartEntity, {
@@ -90,12 +100,14 @@ export function createKart(config: KartConfig): number {
     config.id
   )
 
-  // ── Registro global ──────────────────────────────────────────────────────
+  // Guardar referencia del collider en un mapa para poder restaurarlo al salir
   kartEntityToId.set(kartEntity, config.id)
+  // Mapa secundario: kart entity → collider entity
+  kartColliderMap.set(kartEntity, kartCollider)
 
-  // ── Evento: subirse al kart ─────────────────────────────────────────────
+  // ── Evento: subirse al kart (registrado en la entidad collider) ───────────
   pointerEventsSystem.onPointerDown(
-    { entity: kartEntity, opts: { button: InputAction.IA_POINTER, hoverText: 'Subirse al Kart' } },
+    { entity: kartCollider, opts: { button: InputAction.IA_POINTER, hoverText: 'Subirse al Kart' } },
     () => {
       const kartData  = KartData.getMutable(kartEntity)
       const ownership = KartOwner.getMutable(kartEntity)
@@ -137,9 +149,8 @@ export function createKart(config: KartConfig): number {
       const euler           = Quaternion.toEulerAngles(kartTransform.rotation)
       kartData.lastSafeRotY = euler.y
 
-      // Quitar collider de puntero/física mientras manejás
-      // (para que el raycast de pared no se rebote contra sí mismo)
-      MeshCollider.deleteFrom(kartEntity)
+      // Quitar collider mientras manejás (el raycast de pared no se rebota contra sí mismo)
+      MeshCollider.deleteFrom(kartCollider)
 
       // ── PASO 2: Cámara virtual banda elástica ────────────────────────────
       const bwd = Vector3.rotate(Vector3.Backward(), kartTransform.rotation)

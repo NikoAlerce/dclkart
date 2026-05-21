@@ -9,6 +9,7 @@ import {
 import { KartData, KartOwner } from './components'
 import { Quaternion, Vector3 } from '@dcl/sdk/math'
 import { movePlayerTo } from '~system/RestrictedActions'
+import { kartColliderMap } from './kart'
 import { InputState } from './inputState'
 import { RaceState, RacePhase } from './raceState'
 
@@ -158,10 +159,12 @@ export function kartMovementSystem(dt: number) {
       const ownerComp = KartOwner.getMutableOrNull(entity)
       if (ownerComp) ownerComp.ownerId = ''
 
-      // Restaurar collider PHYSICS + POINTER:
-      // PHYSICS → otros karts pueden chocarlo mientras está estacionado
-      // POINTER → cualquier jugador puede subirse de nuevo
-      MeshCollider.setBox(entity, ColliderLayer.CL_PHYSICS | ColliderLayer.CL_POINTER)
+      // Restaurar el collider hijo con el tamaño real del kart
+      // (PHYSICS: otros karts rebotan, POINTER: otros jugadores pueden subirse)
+      const colliderEnt = kartColliderMap.get(entity)
+      if (colliderEnt !== undefined) {
+        MeshCollider.setBox(colliderEnt as any, ColliderLayer.CL_PHYSICS | ColliderLayer.CL_POINTER)
+      }
 
 
       if (mutableKart.floorSensorEntity) {
