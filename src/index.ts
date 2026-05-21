@@ -18,8 +18,8 @@ export function main() {
     scale: Vector3.create(1, 1, 1)
   })
 
-  // 2. Instanciar el Kart Real unos metros adelante del punto de spawn del avatar
-  createKart(Vector3.create(369.5, 8.6, 312.4))
+  // 2. Kart en la posición original (cerca del checkpoint de largada)
+  createKart(Vector3.create(366.3, 8.6, 316.2))
 
   // 3. Registrar el sistema de movimiento del kart
   engine.addSystem(kartMovementSystem)

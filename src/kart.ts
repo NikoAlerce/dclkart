@@ -100,20 +100,15 @@ export function createKart(spawnPosition: Vector3) {
       })
       kartData.hideAreaEntity = hideAreaEntity
       
-      // ── PASO 1.5: Teletransportar el Kart a la Largada FÍSICA ─────────────
-      // La largada física está cerca de X:367, Z:306 (donde están los semáforos).
-      const START_LINE_POS = Vector3.create(367.25, 9.0, 300)
-      const START_LINE_ROT = Quaternion.fromEulerDegrees(0, 50, 0)
-      
-      const transformMutable = Transform.getMutable(kartEntity)
-      transformMutable.position = START_LINE_POS
-      transformMutable.rotation = START_LINE_ROT
-      
+      // ── PASO 1.5: Guardar la posición actual como checkpoint seguro ─────────
+      // NO reposicionamos el kart: arranca exactamente donde está parado.
+      const currentPos = Transform.get(kartEntity)
       kartData.currentSpeed = 0
-      kartData.lastSafeX = START_LINE_POS.x
-      kartData.lastSafeY = START_LINE_POS.y
-      kartData.lastSafeZ = START_LINE_POS.z
-      kartData.lastSafeRotY = 50
+      kartData.lastSafeX = currentPos.position.x
+      kartData.lastSafeY = currentPos.position.y
+      kartData.lastSafeZ = currentPos.position.z
+      const euler = Quaternion.toEulerAngles(currentPos.rotation)
+      kartData.lastSafeRotY = euler.y
       
       // Remover el collider del puntero para que no moleste el hover mientras manejás
       MeshCollider.deleteFrom(kartEntity)
