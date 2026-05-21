@@ -8,40 +8,48 @@ import {
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion, Color4, Color3 } from '@dcl/sdk/math'
 import { movePlayerTo } from '~system/RestrictedActions'
-import { KartData } from './components'
+import { syncEntity } from '@dcl/sdk/network'
+import { myProfile } from '@dcl/sdk/network'
+import { KartData, KartOwner } from './components'
 import { RaceState } from './raceState'
+import type { KartConfig } from './kartConfig'
 
-// ─── Coordenada del "Estacionamiento" ────────────────────────────────────────
-// El avatar real se teletransporta aquí al subirse y queda inerte.
-// Lo ponemos alto (Y=100) para que el collider invisible del avatar no bloquee la pista.
+// ─── Estacionamiento del avatar ───────────────────────────────────────────────
+// El avatar se teletransporta aquí al subirse. Alto (Y=100) para que
+// el collider del avatar no interfiera con la pista.
 const PARKING_SPOT = Vector3.create(472, 100, 248)
 
-export function createKart(spawnPosition: Vector3) {
+// ─── Mapa global: entity → config.id  (para que kartSystem pueda leer el id) ──
+export const kartEntityToId = new Map<number, number>()
+
+export function createKart(config: KartConfig): number {
   const kartEntity = engine.addEntity()
 
   // ── Entidad padre: física y movimiento ──────────────────────────────────
   Transform.create(kartEntity, {
-    position: spawnPosition,
-    rotation: Quaternion.fromEulerDegrees(0, 50, 0),
-    scale: Vector3.create(1, 1, 1)
+    position: config.spawnPos,
+    rotation: Quaternion.fromEulerDegrees(0, config.spawnRotY, 0),
+    scale:    Vector3.create(1, 1, 1)
   })
 
   // ── Modelo visual (hijo con corrección de orientación) ──────────────────
   const kartModel = engine.addEntity()
   GltfContainer.create(kartModel, {
-    src: 'assets/models/kart.glb',
+    src: config.modelPath,
     invisibleMeshesCollisionMask: ColliderLayer.CL_NONE,
-    visibleMeshesCollisionMask: ColliderLayer.CL_NONE
+    visibleMeshesCollisionMask:   ColliderLayer.CL_NONE
   })
   Transform.create(kartModel, {
-    parent: kartEntity,
-    position: Vector3.create(0, 0.4, 0),              // 0.4m arriba: no se hunde en el asfalto
-    rotation: Quaternion.fromEulerDegrees(0, -90, 0), // Corrección: eje +X del GLB → +Z del padre
-    scale: Vector3.create(1.25, 1.25, 1.25)
+    parent:   kartEntity,
+    position: Vector3.create(0, 0.4, 0),
+    rotation: Quaternion.fromEulerDegrees(0, -90, 0),
+    scale:    Vector3.create(1.25, 1.25, 1.25)
   })
 
-  // Collider solo para puntero (sin física nativa: DCL no puede empujar el kart)
-  MeshCollider.setBox(kartEntity, ColliderLayer.CL_POINTER)
+  // ── Collider doble: PHYSICS (choque kart-kart) + POINTER (hover/click) ──
+  // CL_PHYSICS: los raycasts de otros karts chocan contra este kart.
+  // CL_POINTER: muestra el texto "Subirse al Kart" al acercarse.
+  MeshCollider.setBox(kartEntity, ColliderLayer.CL_PHYSICS | ColliderLayer.CL_POINTER)
 
   // ── Datos de físicas iniciales ──────────────────────────────────────────
   KartData.create(kartEntity, {
@@ -55,161 +63,161 @@ export function createKart(spawnPosition: Vector3) {
     driftTime:      0,
     driftDirection: 0,
     boostTime:      0,
-    // Checkpoint inicial = posición de spawn
-    lastSafeX:    spawnPosition.x,
-    lastSafeY:    spawnPosition.y,
-    lastSafeZ:    spawnPosition.z,
-    lastSafeRotY: 50,  // Rotación inicial del kart
+    lastSafeX:    config.spawnPos.x,
+    lastSafeY:    config.spawnPos.y,
+    lastSafeZ:    config.spawnPos.z,
+    lastSafeRotY: config.spawnRotY,
     modelEntity:  kartModel
   })
 
-  // ── Glow Base (Estética Premium) ──────────────────────────────────────────
+  // ── KartOwner: libre al inicio ───────────────────────────────────────────
+  KartOwner.create(kartEntity, { ownerId: '' })
+
+  // ── Glow neon (estética premium) ─────────────────────────────────────────
   LightSource.create(kartEntity, {
-    color: Color3.create(0.2, 0.8, 1.0), // Glow neon cyan
-    intensity: 2, // Bajamos la intensidad para no quemar la textura del kart
-    range: 10
+    color:     Color3.create(0.2, 0.8, 1.0),
+    intensity: 2,
+    range:     10
   })
+
+  // ── Sincronización multijugador ──────────────────────────────────────────
+  // Transform: todos los jugadores ven el kart moverse en tiempo real.
+  // KartOwner: todos saben quién está manejando (para bloquear el clic).
+  // enumId = config.id  →  debe ser único y estable (hardcodeado en kartConfig.ts).
+  syncEntity(
+    kartEntity,
+    [Transform.componentId, KartOwner.componentId],
+    config.id
+  )
+
+  // ── Registro global ──────────────────────────────────────────────────────
+  kartEntityToId.set(kartEntity, config.id)
 
   // ── Evento: subirse al kart ─────────────────────────────────────────────
   pointerEventsSystem.onPointerDown(
     { entity: kartEntity, opts: { button: InputAction.IA_POINTER, hoverText: 'Subirse al Kart' } },
     () => {
-      const kartData = KartData.getMutable(kartEntity)
+      const kartData  = KartData.getMutable(kartEntity)
+      const ownership = KartOwner.getMutable(kartEntity)
+
+      // Si ya está ocupado (otro jugador lo está usando), nada
+      if (ownership.ownerId !== '') return
       if (kartData.isOccupied) return
+
+      // Reclamar el kart: sincronizado para que todos vean que está ocupado
+      const myId = myProfile?.userId ?? 'local'
+      ownership.ownerId   = myId
       kartData.isOccupied = true
       RaceState.startCountdown()
 
       const kartTransform = Transform.get(kartEntity)
 
-      // ── PASO 1: Ocultar el Avatar y Bloquear Controles ────────────────────
-      // Como no podemos mover físicamente el avatar fotograma a fotograma (DCL lo impide),
-      // el avatar se quedará quieto en la largada. Lo ocultamos poniéndole una "caja de invisibilidad".
+      // ── PASO 1: Ocultar Avatar y bloquear controles ──────────────────────
       InputModifier.createOrReplace(engine.PlayerEntity, {
         mode: InputModifier.Mode.Standard({ disableAll: true })
       })
-      
+
       const hideAreaEntity = engine.addEntity()
       Transform.create(hideAreaEntity, {
-        parent: engine.PlayerEntity,
+        parent:   engine.PlayerEntity,
         position: Vector3.Zero()
       })
       AvatarModifierArea.create(hideAreaEntity, {
-        area: Vector3.create(4, 4, 4),
+        area:      Vector3.create(4, 4, 4),
         modifiers: [AvatarModifierType.AMT_HIDE_AVATARS],
         excludeIds: []
       })
       kartData.hideAreaEntity = hideAreaEntity
-      
-      // ── PASO 1.5: Guardar la posición actual como checkpoint seguro ─────────
-      // NO reposicionamos el kart: arranca exactamente donde está parado.
-      const currentPos = Transform.get(kartEntity)
+
+      // ── PASO 1.5: Registrar posición actual como checkpoint seguro ───────
       kartData.currentSpeed = 0
-      kartData.lastSafeX = currentPos.position.x
-      kartData.lastSafeY = currentPos.position.y
-      kartData.lastSafeZ = currentPos.position.z
-      const euler = Quaternion.toEulerAngles(currentPos.rotation)
+      kartData.lastSafeX    = kartTransform.position.x
+      kartData.lastSafeY    = kartTransform.position.y
+      kartData.lastSafeZ    = kartTransform.position.z
+      const euler           = Quaternion.toEulerAngles(kartTransform.rotation)
       kartData.lastSafeRotY = euler.y
-      
-      // Remover el collider del puntero para que no moleste el hover mientras manejás
+
+      // Quitar collider de puntero/física mientras manejás
+      // (para que el raycast de pared no se rebote contra sí mismo)
       MeshCollider.deleteFrom(kartEntity)
 
-      // ── PASO 2: Cámara virtual "banda elástica" ──────────────────────────
-      // La cámara NO tiene parent. Vive suelta en el mundo.
-      // kartMovementSystem la persigue al kart con lerp cada frame,
-      // eliminando la rigidez del "rigid parenting" que sacudía la pantalla.
+      // ── PASO 2: Cámara virtual banda elástica ────────────────────────────
       const bwd = Vector3.rotate(Vector3.Backward(), kartTransform.rotation)
       const cameraPivot = engine.addEntity()
       Transform.create(cameraPivot, {
-        // Sin parent → posición en espacio mundial
         position: Vector3.create(
           kartTransform.position.x + bwd.x * 7.0,
           kartTransform.position.y + 3.2,
           kartTransform.position.z + bwd.z * 7.0
         ),
-        rotation: kartTransform.rotation   // Inicialmente mira en la misma dirección que el kart
+        rotation: kartTransform.rotation
       })
       VirtualCamera.create(cameraPivot, {})
       MainCamera.createOrReplace(engine.CameraEntity, { virtualCameraEntity: cameraPivot })
       kartData.cameraPivotEntity = cameraPivot
 
-      // ── PASO 3a: Sensor de PISO (hijo, rayo hacia abajo) ─────────────────
-      // Entidad separada porque una entidad solo puede tener UN Raycast.
-      // Posicionada 4m arriba del kart: el rayo nunca clipea en rampas.
+      // ── PASO 3a: Sensor de PISO ───────────────────────────────────────────
       const floorSensor = engine.addEntity()
       Transform.create(floorSensor, {
-        parent: kartEntity,
+        parent:   kartEntity,
         position: Vector3.create(0, 4.0, 0)
       })
       Raycast.createOrReplace(floorSensor, {
-        direction: { $case: 'globalDirection', globalDirection: Vector3.create(0, -1, 0) },
-        maxDistance: 20.0,
-        queryType: RaycastQueryType.RQT_QUERY_ALL,
-        continuous: true,
+        direction:     { $case: 'globalDirection', globalDirection: Vector3.create(0, -1, 0) },
+        maxDistance:   20.0,
+        queryType:     RaycastQueryType.RQT_QUERY_ALL,
+        continuous:    true,
         collisionMask: ColliderLayer.CL_PHYSICS
       })
       kartData.floorSensorEntity = floorSensor
 
-      // ── PASO 3b: Sensor de PARED (hijo, rayo hacia adelante) ─────────────
-      // localDirection: el rayo siempre apunta en el +Z LOCAL del sensor,
-      // que al ser hijo del kart = dirección de avance del kart en el mundo.
+      // ── PASO 3b: Sensor de PARED (y choque con otros karts) ──────────────
       const wallSensor = engine.addEntity()
       Transform.create(wallSensor, {
-        parent: kartEntity,
-        position: Vector3.create(0, 0.5, 1.0)  // trompa del kart, 0.5m del suelo
+        parent:   kartEntity,
+        position: Vector3.create(0, 0.5, 1.0)
       })
       Raycast.createOrReplace(wallSensor, {
-        direction: { $case: 'localDirection', localDirection: Vector3.create(0, 0, 1) },
-        maxDistance: 2.5,
-        queryType: RaycastQueryType.RQT_QUERY_ALL, // Para no perder checkpoints detrás de otros objetos
-        continuous: true,
-        collisionMask: ColliderLayer.CL_PHYSICS
+        direction:     { $case: 'localDirection', localDirection: Vector3.create(0, 0, 1) },
+        maxDistance:   2.5,
+        queryType:     RaycastQueryType.RQT_QUERY_ALL,
+        continuous:    true,
+        collisionMask: ColliderLayer.CL_PHYSICS   // detecta paredes Y otros karts
       })
       kartData.wallSensorEntity = wallSensor
 
-      // Inicializar checkpoint con la posición actual del kart
-      kartData.lastSafeX    = kartTransform.position.x
-      kartData.lastSafeY    = kartTransform.position.y
-      kartData.lastSafeZ    = kartTransform.position.z
-      kartData.lastSafeRotY = 50
-
-      // ── PASO 4: Chispas de drift (ParticleSystem + LightSource) ──────────
-      // Una sola entidad hija en la cola del kart.
-      // ParticleSystem: PSS_WORLD (1) → chispas quedan fijas en el suelo al moverse.
-      // PSB_ADD (1) → blend aditivo = brillo máximo, como sparks reales.
-      // LightSource: luz puntual que pulsa en sincronía con las chispas.
+      // ── PASO 4: Chispas de drift ─────────────────────────────────────────
       const sparkEntity = engine.addEntity()
       Transform.create(sparkEntity, {
-        parent: kartEntity,
-        position: Vector3.create(0, 0.15, -0.9)   // cola del kart, a nivel del suelo
+        parent:   kartEntity,
+        position: Vector3.create(0, 0.15, -0.9)
       })
       ParticleSystem.create(sparkEntity, {
-        active: false,
-        rate: 0,
+        active:       false,
+        rate:         0,
         maxParticles: 120,
-        lifetime: 0.35,
-        gravity: -2,
-        simulationSpace: 1,          // 1 = PSS_WORLD: las chispas quedan en el suelo
-        initialVelocitySpeed: { start: 1.5, end: 5.0 },
-        initialSize: { start: 0.03, end: 0.09 },
-        sizeOverTime: { start: 0.0, end: 0.01 },
-        faceTravelDirection: true,
-        blendMode: 1,                // 1 = PSB_ADD: aditivo = máximo brillo
-        billboard: true,
+        lifetime:     0.35,
+        gravity:      -2,
+        simulationSpace:           1,
+        initialVelocitySpeed:      { start: 1.5, end: 5.0 },
+        initialSize:               { start: 0.03, end: 0.09 },
+        sizeOverTime:              { start: 0.0,  end: 0.01 },
+        faceTravelDirection:       true,
+        blendMode:                 1,
+        billboard:                 true,
         initialColor: {
           start: Color4.create(1, 0.85, 0.2, 1),
-          end: Color4.create(1, 1,    0.5, 1)
+          end:   Color4.create(1, 1,    0.5, 1)
         }
       })
       LightSource.create(sparkEntity, {
-        active: false,
-        color: { r: 1, g: 0.85, b: 0.2 },   // amarillo inicial (cambia con driftTime)
+        active:    false,
+        color:     { r: 1, g: 0.85, b: 0.2 },
         intensity: 0,
-        range: 4.0,
-        shadow: false
+        range:     4.0,
+        shadow:    false
       })
       kartData.sparkEntity = sparkEntity
-
-      // Fase 3 (arte): aquí se emparentará el .glb del piloto al kartEntity.
     }
   )
 

@@ -6,9 +6,9 @@ import {
   ParticleSystem, LightSource,
   pointerEventsSystem, MeshCollider, ColliderLayer
 } from '@dcl/sdk/ecs'
+import { KartData, KartOwner } from './components'
 import { Quaternion, Vector3 } from '@dcl/sdk/math'
 import { movePlayerTo } from '~system/RestrictedActions'
-import { KartData } from './components'
 import { InputState } from './inputState'
 import { RaceState, RacePhase } from './raceState'
 
@@ -154,8 +154,14 @@ export function kartMovementSystem(dt: number) {
       InputModifier.deleteFrom(engine.PlayerEntity)
       AvatarModifierArea.deleteFrom(entity)
 
-      // Reactivar el botón de "Subirse" restaurando su collider
-      MeshCollider.setBox(entity, ColliderLayer.CL_POINTER)
+      // Liberar el kart en la red (todos los jugadores ven que quedó libre)
+      const ownerComp = KartOwner.getMutableOrNull(entity)
+      if (ownerComp) ownerComp.ownerId = ''
+
+      // Restaurar collider PHYSICS + POINTER:
+      // PHYSICS → otros karts pueden chocarlo mientras está estacionado
+      // POINTER → cualquier jugador puede subirse de nuevo
+      MeshCollider.setBox(entity, ColliderLayer.CL_PHYSICS | ColliderLayer.CL_POINTER)
 
 
       if (mutableKart.floorSensorEntity) {

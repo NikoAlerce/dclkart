@@ -17,13 +17,11 @@ export const KartData = engine.defineComponent('KartData', {
   driftDirection:    Schemas.Float,
   boostTime:         Schemas.Float,
   // ── Checkpoint de seguridad (respawn) ────────────────────────────────────
-  // Posición y rotación del último punto seguro sobre el asfalto.
-  // Se actualiza cada segundo cuando el kart está grounded y en movimiento.
   lastSafeX:         Schemas.Float,
   lastSafeY:         Schemas.Float,
   lastSafeZ:         Schemas.Float,
   lastSafeRotY:      Schemas.Float,
-  // ── Entidades hijas ──────────────────────────────────────────────────────
+  // ── Entidades hijas (solo locales, no se sincronizan) ─────────────────────
   pilotEntity:        Schemas.Optional(Schemas.Entity),
   cameraPivotEntity:  Schemas.Optional(Schemas.Entity),
   modelEntity:        Schemas.Optional(Schemas.Entity),
@@ -31,4 +29,11 @@ export const KartData = engine.defineComponent('KartData', {
   wallSensorEntity:   Schemas.Optional(Schemas.Entity),
   sparkEntity:        Schemas.Optional(Schemas.Entity),
   hideAreaEntity:     Schemas.Optional(Schemas.Entity)
+})
+
+// ─── KartOwner: quién está manejando este kart (sincronizado en red) ──────────
+// ownerId = '' → kart libre
+// ownerId = address del jugador → kart ocupado por ese jugador
+export const KartOwner = engine.defineComponent('KartOwner', {
+  ownerId: Schemas.String
 })
