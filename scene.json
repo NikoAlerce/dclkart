@@ -1850,26 +1850,26 @@
   },
   "spawnPoints": [
     {
-      "name": "spawn1",
+      "name": "spawn_paddock",
       "default": true,
       "position": {
         "x": [
-          367,
-          368
+          361,
+          371
         ],
         "y": [
           9,
           9
         ],
         "z": [
-          316,
-          317
+          320,
+          325
         ]
       },
       "cameraTarget": {
-        "x": 366.3,
+        "x": 366,
         "y": 8.6,
-        "z": 316.2
+        "z": 315
       }
     }
   ],
