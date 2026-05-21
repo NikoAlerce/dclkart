@@ -12,6 +12,7 @@ import { movePlayerTo } from '~system/RestrictedActions'
 import { kartColliderMap } from './kart'
 import { InputState } from './inputState'
 import { RaceState, RacePhase } from './raceState'
+import { SpeedEffects } from './speedEffects'
 
 // ─── Estado de módulo ─────────────────────────────────────────────────────────
 let lastKnownGroundY  = 8.6
@@ -51,6 +52,20 @@ const AVATAR_SYNC_INTERVAL = 0.4
 
 // Respawn: si el kart cae por debajo de esta Y, teleport al último checkpoint
 const RESPAWN_Y       = 5.0
+
+// ─── Spring-Damper para la cámara (más orgánico que lerp puro) ───────────────
+// K = rigidez (qué tan rápido persigue al kart)
+// D = amortiguación (2*sqrt(K) = crítico, < eso = ligero overshoot natural)
+let camVelX = 0, camVelY = 0, camVelZ = 0
+const CAM_SPRING_K = 32   // rigidez
+const CAM_SPRING_D = 8    // levemente sub-amortiguado → overshoot orgánico
+
+// Roll (inclinación) de cámara en curvas — spring-damper propio
+let camRoll    = 0   // grados actuales de roll
+let camRollVel = 0
+
+// Para detectar el INICIO del boost (destello UI)
+let wasBoostActive = false
 // ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -151,6 +166,13 @@ export function kartMovementSystem(dt: number) {
       checkpointTimer           = 0
       bounceCooldown            = 0
       currentSteering           = 0
+      camVelX = 0; camVelY = 0; camVelZ = 0
+      camRoll = 0; camRollVel  = 0
+      wasBoostActive            = false
+      SpeedEffects.speedFactor  = 0
+      SpeedEffects.boostFlash   = 0
+      SpeedEffects.boostActive  = false
+      SpeedEffects.driftActive  = false
 
       InputModifier.deleteFrom(engine.PlayerEntity)
       AvatarModifierArea.deleteFrom(entity)
@@ -243,6 +265,9 @@ export function kartMovementSystem(dt: number) {
       currentSteering          = 0
       coyoteFrames             = 0
       lastKnownGroundY         = mutableKart.lastSafeY
+      // Reset spring-damper al respawnear (evita que la cámara explote)
+      camVelX = 0; camVelY = 0; camVelZ = 0
+      camRoll = 0; camRollVel = 0
       continue
     }
 
@@ -549,41 +574,83 @@ export function kartMovementSystem(dt: number) {
       }
     }
 
-    // ── 10. CÁMARA BANDA ELÁSTICA ─────────────────────────────────────────
-    // La cámara vive en espacio mundial (sin parent).
-    // Cada frame: calculamos dónde DEBERÍA estar y la interpolamos hacia allí.
-    //
-    // Factor de posición 4.5 → la cámara alcanza el punto ideal en ~0.4s
-    // Factor de rotación 8.0 → mira al kart más rápido que se mueve
+    // ── 10. CÁMARA CON SPRING-DAMPER ─────────────────────────────────────
+    // Spring-damper (K=32, D=8) en lugar de lerp simple:
+    //   - Sigue al kart con ligero overshoot natural cuando acelera/gira
+    //   - Al frenar o cambiar de dirección, la cámara oscila brevemente
+    //   - Mucho más orgánico que dt*4.5 lerp que siempre va suavizado
     if (mutableKart.cameraPivotEntity) {
       const camT = Transform.getMutableOrNull(mutableKart.cameraPivotEntity as any)
       if (camT) {
         const backVec = Vector3.rotate(Vector3.Backward(), transform.rotation)
         const fwdVec  = Vector3.rotate(Vector3.Forward(),  transform.rotation)
+        const sideVec = Vector3.rotate(Vector3.Right(),    transform.rotation)
 
-        // Distancia dinámica: 7m quieto → 10m a max speed (efecto zoom-out de FOV)
-        const camDist   = 7.0 + sf * 3.0
-        // Pull-back extra durante boost: la cámara retrocede al arrancar
-        const boostPull = mutableKart.boostTime > 0 ? mutableKart.boostTime * 1.5 : 0
+        // Distancia dramática: 6.5m quieto → 13.5m a max speed (zoom-out real)
+        const camDist   = 6.5 + sf * 7.0
+        // Pull-back extra durante boost: 2.5× más pronunciado
+        const boostPull = mutableKart.boostTime > 0 ? mutableKart.boostTime * 2.5 : 0
 
-        const idealPos  = Vector3.create(
-          transform.position.x + backVec.x * (camDist + boostPull),
-          transform.position.y + 3.2 + sf * 0.8,
-          transform.position.z + backVec.z * (camDist + boostPull)
+        // Lateral look-ahead: cámara se desplaza hacia el lado que vas a girar
+        // A alta velocidad (sf=1) el desplazamiento llega a ±1.8m
+        const lateralShift = currentSteering * sf * 1.8
+
+        const idealPos = Vector3.create(
+          transform.position.x + backVec.x * (camDist + boostPull) + sideVec.x * lateralShift,
+          transform.position.y + 3.5 + sf * 1.2,   // más alta a máxima velocidad
+          transform.position.z + backVec.z * (camDist + boostPull) + sideVec.z * lateralShift
         )
-        const posFactor = Math.min(1, dt * 4.5)
-        camT.position   = lerpV3(camT.position, idealPos, posFactor)
 
-        // Look-ahead: a alta velocidad la cámara mira hacia adelante del kart
+        // Spring-damper position (levemente sub-amortiguado → overshoot orgánico)
+        const dxCam = idealPos.x - camT.position.x
+        const dyCam = idealPos.y - camT.position.y
+        const dzCam = idealPos.z - camT.position.z
+        camVelX += (CAM_SPRING_K * dxCam - CAM_SPRING_D * camVelX) * dt
+        camVelY += (CAM_SPRING_K * dyCam - CAM_SPRING_D * camVelY) * dt
+        camVelZ += (CAM_SPRING_K * dzCam - CAM_SPRING_D * camVelZ) * dt
+        camT.position.x += camVelX * dt
+        camT.position.y += camVelY * dt
+        camT.position.z += camVelZ * dt
+
+        // Look-ahead más dramático: a velocidad máxima mira 6m adelante del kart
         const lookTarget = Vector3.create(
-          transform.position.x + fwdVec.x * sf * 3.0,
-          transform.position.y + 1.0,
-          transform.position.z + fwdVec.z * sf * 3.0
+          transform.position.x + fwdVec.x * (1.0 + sf * 5.0),
+          transform.position.y + 1.2,
+          transform.position.z + fwdVec.z * (1.0 + sf * 5.0)
         )
-        const targetRot = computeLookAt(camT.position, lookTarget)
-        const rotFactor = Math.min(1, dt * 8.0)
+        const targetRotBase = computeLookAt(camT.position, lookTarget)
+
+        // Roll (inclinación) de cámara en curvas — spring-damper propio
+        // Normal: ±3.5° según giro  |  Drift: ±5° según lado de drift
+        const targetRoll = mutableKart.isDrifting
+          ? mutableKart.driftDirection * 5.0
+          : -currentSteering * sf * 3.5
+        camRollVel += (-70 * (camRoll - targetRoll) - 13 * camRollVel) * dt
+        camRoll    += camRollVel * dt
+
+        // Aplicar roll al quaternión de rotación final
+        const rollQ     = Quaternion.fromEulerDegrees(0, 0, camRoll)
+        const targetRot = Quaternion.multiply(targetRotBase, rollQ)
+
+        const rotFactor = Math.min(1, dt * 10.0)  // rotación sigue rápido
         camT.rotation   = nlerp(camT.rotation, targetRot, rotFactor)
       }
+    }
+
+    // ── 11. EFECTOS DE VELOCIDAD PARA UI ─────────────────────────────────
+    SpeedEffects.speedFactor = sf
+    SpeedEffects.boostActive = mutableKart.boostTime > 0
+    SpeedEffects.driftActive = mutableKart.isDrifting
+
+    // Destello boost: detectar el primer frame que arranca el boost
+    if (mutableKart.boostTime > 0 && !wasBoostActive) {
+      SpeedEffects.boostFlash = 1.0  // destello inmediato máximo
+    }
+    wasBoostActive = mutableKart.boostTime > 0
+
+    // Decaer el flash: 0.18s para ir de 1 → 0
+    if (SpeedEffects.boostFlash > 0) {
+      SpeedEffects.boostFlash = Math.max(0, SpeedEffects.boostFlash - dt * 5.5)
     }
   }
 }
