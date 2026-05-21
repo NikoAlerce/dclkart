@@ -26,6 +26,16 @@ for filepath in files:
         g = json.loads(jdata.decode('utf-8'))
 
         fixed = False
+        
+        # Corregir escena por defecto ausente (hace invisibles los karts en Bevy/DCL)
+        if g.get('scene') is None:
+            if len(g.get('scenes', [])) > 0:
+                print('  Corrigiendo escena por defecto: seteando scene = 0')
+                g['scene'] = 0
+                fixed = True
+            else:
+                print('  ADVERTENCIA: El archivo no tiene escenas definidas')
+
         for m in g.get('materials', []):
             pbr = m.get('pbrMetallicRoughness', {})
             # Quitar la textura de rugosidad metálica defectuosa que causa que se vea blanco/espejado
