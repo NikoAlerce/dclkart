@@ -122,8 +122,8 @@ export function kartMovementSystem(dt: number) {
   InputState.right       = inputSystem.isPressed(InputAction.IA_RIGHT)
   InputState.drift       = inputSystem.isPressed(InputAction.IA_JUMP)
   InputState.exit        = inputSystem.isTriggered(InputAction.IA_PRIMARY, PointerEventType.PET_DOWN)
-  InputState.thrustUp    = inputSystem.isPressed(InputAction.IA_ACTION_3)   // E
-  InputState.thrustDown  = inputSystem.isPressed(InputAction.IA_ACTION_4)   // Q
+  InputState.thrustUp    = inputSystem.isPressed(InputAction.IA_ACTION_4)   // R
+  InputState.thrustDown  = inputSystem.isPressed(InputAction.IA_SECONDARY)  // F
 
   // ── Inercia del volante ───────────────────────────────────────────────────
   // rawSteering: señal binaria ±1 del input real
@@ -250,10 +250,25 @@ export function kartMovementSystem(dt: number) {
 
     // ── MODO NAVE ─────────────────────────────────────────────────────────
     // Las naves ignoran la gravedad, no usan sensores de piso/pared, y
-    // pueden moverse libremente en los 3 ejes con E (subir) y Q (bajar).
+    // pueden moverse libremente en los 3 ejes con R (subir) y F (bajar).
     if (mutableKart.vehicleType === 'ship') {
       const scaleMult = mutableKart.scale || 1.0
       const sf = Math.abs(mutableKart.currentSpeed) / mutableKart.maxSpeed
+
+      // Leer el sensor de piso para saber la altura real del terreno
+      if (mutableKart.floorSensorEntity) {
+        const floorResult = RaycastResult.getOrNull(mutableKart.floorSensorEntity as any)
+        if (floorResult && floorResult.hits.length > 0) {
+          const validHits = floorResult.hits.filter(h =>
+            h.entityId !== engine.PlayerEntity && h.entityId !== entity && h.position != null
+          )
+          if (validHits.length > 0) {
+            validHits.sort((a, b) => (a.length ?? Infinity) - (b.length ?? Infinity))
+            const closest = validHits[0]
+            if (closest.position) lastKnownGroundY = closest.position.y
+          }
+        }
+      }
 
       // ── Velocidad horizontal (W/S) con inercia ─────────────────────────
       const speedRatio   = Math.abs(mutableKart.currentSpeed) / mutableKart.maxSpeed

@@ -20,8 +20,8 @@ export type KartInputPayload = {
   right:      boolean
   drift:      boolean   // Barra espaciadora — activa drift
   exit:       boolean
-  thrustUp:   boolean   // E — subir (modo nave)
-  thrustDown: boolean   // Q — bajar (modo nave)
+  thrustUp:   boolean   // R — subir (modo nave)
+  thrustDown: boolean   // F — bajar (modo nave)
   tick:       number
 }
 
