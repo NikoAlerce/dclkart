@@ -122,7 +122,7 @@ export function kartMovementSystem(dt: number) {
   InputState.right       = inputSystem.isPressed(InputAction.IA_RIGHT)
   InputState.drift       = inputSystem.isPressed(InputAction.IA_JUMP)
   InputState.exit        = inputSystem.isTriggered(InputAction.IA_PRIMARY, PointerEventType.PET_DOWN)
-  InputState.thrustUp    = inputSystem.isPressed(InputAction.IA_ACTION_4)   // R
+  InputState.thrustUp    = inputSystem.isPressed(InputAction.IA_JUMP)       // ESPACIO (DCL no permite leer la letra R)
   InputState.thrustDown  = inputSystem.isPressed(InputAction.IA_SECONDARY)  // F
 
   // ── Inercia del volante ───────────────────────────────────────────────────
