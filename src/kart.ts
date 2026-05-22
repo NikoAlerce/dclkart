@@ -13,7 +13,7 @@ import { myProfile } from '@dcl/sdk/network'
 import { KartData, KartOwner } from './components'
 import { RaceState } from './raceState'
 import type { KartConfig } from './kartConfig'
-import { DEFAULT_PHYSICS } from './kartConfig'
+import { DEFAULT_PHYSICS, KART_CONFIGS } from './kartConfig'
 
 // ─── Estacionamiento del avatar ───────────────────────────────────────────────
 // El avatar se teletransporta aquí al subirse. Alto (Y=100) para que
@@ -233,4 +233,62 @@ export function createKart(config: KartConfig): number {
   )
 
   return kartEntity
+}
+
+// ─── Escáner Automático para Creator Hub ─────────────────────────────────────
+export function scanAndConvertKarts() {
+  let foundCount = 0
+  let autoId = 100 // IDs para los karts escaneados
+
+  // Usamos un sistema que corre UNA SOLA VEZ en el primer frame
+  // Esto asegura que Decentraland ya cargó todo lo del Creator Hub en memoria.
+  function scanSystem() {
+    for (const [entity, gltf, transform] of engine.getEntitiesWith(GltfContainer, Transform)) {
+      const src = gltf.src.toLowerCase()
+      
+      // Si el modelo es un kart o una nave
+      if (src.includes('kart') || src.includes('nave')) {
+        foundCount++
+        
+        // Extraemos los datos visuales que pusiste en el Creator Hub
+        const pos = transform.position
+        // Convertimos el cuaternión a grados Y (yaw)
+        const euler = Quaternion.toEulerAngles(transform.rotation)
+        const scaleMult = transform.scale.x
+
+        // Determinamos el tipo
+        const vType = src.includes('nave') ? 'ship' : 'kart'
+
+        console.log(`[SCANNER] ¡Vehículo detectado en el Creator Hub! Tipo: ${vType}, Modelo: ${src}, Pos: ${pos.x},${pos.y},${pos.z}`)
+
+        // Usamos nuestra fábrica de físicas para crear el auto "vivo" en ese mismo lugar
+        createKart({
+          id: autoId++,
+          spawnPos: Vector3.create(pos.x, pos.y, pos.z),
+          spawnRotY: euler.y,
+          scale: scaleMult,
+          modelPath: gltf.src,
+          vehicleType: vType as 'kart' | 'ship'
+        })
+        
+        // Borramos la entidad visual estática original para que no haya duplicados
+        engine.removeEntity(entity)
+      }
+    }
+
+    // Si el escáner no encontró NADA en el Creator Hub (ej: recién clonás el proyecto y no abriste el Hub)
+    // spawneamos la grilla clásica por defecto para que el juego siga funcionando.
+    if (foundCount === 0) {
+      console.log(`[SCANNER] No se encontraron karts en el Creator Hub. Spawneando karts por defecto...`)
+      for (const config of KART_CONFIGS) {
+        createKart(config)
+      }
+    }
+
+    // El sistema se auto-destruye después de correr 1 vez
+    engine.removeSystem(scanSystem)
+  }
+
+  // Agregamos el sistema
+  engine.addSystem(scanSystem)
 }
