@@ -155,24 +155,24 @@ const uiComponent = () => (
         uiBackground={{ color: Color4.create(0, 0, 0, 0.45) }}
       >
         <Label
-          value="🏎️  CONTROLES"
+          value="🏎️  CONTROLS"
           fontSize={13}
           color={Color4.create(1, 0.9, 0.1, 1)}
           uiTransform={{ width: '100%', height: 22 }}
         />
         {RaceState.vehicleType === 'kart' ? (
           <UiEntity uiTransform={{ flexDirection: 'column', width: '100%' }}>
-            <Label value="[W A S D] Manejar" fontSize={11} color={Color4.create(0.8, 0.8, 0.8, 0.8)} uiTransform={{ width: '100%', height: 16 }} />
-            <Label value="[Espacio] Derrapar" fontSize={11} color={Color4.create(0.8, 0.8, 0.8, 0.8)} uiTransform={{ width: '100%', height: 16 }} />
+            <Label value="[W A S D] Drive" fontSize={11} color={Color4.create(0.8, 0.8, 0.8, 0.8)} uiTransform={{ width: '100%', height: 16 }} />
+            <Label value="[Space] Drift" fontSize={11} color={Color4.create(0.8, 0.8, 0.8, 0.8)} uiTransform={{ width: '100%', height: 16 }} />
           </UiEntity>
         ) : (
           <UiEntity uiTransform={{ flexDirection: 'column', width: '100%' }}>
-            <Label value="[W A S D] Navegar" fontSize={11} color={Color4.create(0.8, 0.8, 0.8, 0.8)} uiTransform={{ width: '100%', height: 16 }} />
-            <Label value="[Espacio] Subir" fontSize={11} color={Color4.create(0.8, 0.8, 0.8, 0.8)} uiTransform={{ width: '100%', height: 16 }} />
-            <Label value="[F] Bajar" fontSize={11} color={Color4.create(0.8, 0.8, 0.8, 0.8)} uiTransform={{ width: '100%', height: 16 }} />
+            <Label value="[W A S D] Fly" fontSize={11} color={Color4.create(0.8, 0.8, 0.8, 0.8)} uiTransform={{ width: '100%', height: 16 }} />
+            <Label value="[Space] Ascend" fontSize={11} color={Color4.create(0.8, 0.8, 0.8, 0.8)} uiTransform={{ width: '100%', height: 16 }} />
+            <Label value="[F] Descend" fontSize={11} color={Color4.create(0.8, 0.8, 0.8, 0.8)} uiTransform={{ width: '100%', height: 16 }} />
           </UiEntity>
         )}
-        <Label value="[E] Salir" fontSize={11} color={Color4.create(0.8, 0.8, 0.8, 0.8)} uiTransform={{ width: '100%', height: 16 }} />
+        <Label value="[E] Exit" fontSize={11} color={Color4.create(0.8, 0.8, 0.8, 0.8)} uiTransform={{ width: '100%', height: 16 }} />
       </UiEntity>
     )}
 

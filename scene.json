@@ -2,8 +2,8 @@
   "ecs7": true,
   "runtimeVersion": "7",
   "display": {
-    "title": "Mario Kart DCL",
-    "description": "Carreras de karts estilo Mario Kart en Decentraland",
+    "title": "The Fun Place",
+    "description": "Mario Kart style racing in Decentraland",
     "navmapThumbnail": "images/scene-thumbnail.png",
     "favicon": "favicon_asset"
   },
