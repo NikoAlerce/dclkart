@@ -121,7 +121,8 @@ export function kartMovementSystem(dt: number) {
   InputState.left        = inputSystem.isPressed(InputAction.IA_LEFT)
   InputState.right       = inputSystem.isPressed(InputAction.IA_RIGHT)
   InputState.drift       = inputSystem.isPressed(InputAction.IA_JUMP)
-  InputState.thrustUp    = inputSystem.isPressed(InputAction.IA_PRIMARY)    // E
+  InputState.exit        = inputSystem.isTriggered(InputAction.IA_PRIMARY, PointerEventType.PET_DOWN)
+  InputState.thrustUp    = inputSystem.isPressed(InputAction.IA_JUMP)       // ESPACIO (DCL no permite leer la letra R)
   InputState.thrustDown  = inputSystem.isPressed(InputAction.IA_SECONDARY)  // F
 
   // ── Inercia del volante ───────────────────────────────────────────────────
@@ -139,11 +140,7 @@ export function kartMovementSystem(dt: number) {
     const transform   = Transform.getMutable(entity)
 
     // ── 0. SALIR ──────────────────────────────────────────────────────────
-    const isShip = mutableKart.vehicleType === 'ship'
-    const exitKart = !isShip && inputSystem.isTriggered(InputAction.IA_PRIMARY, PointerEventType.PET_DOWN)
-    const exitShip = isShip && inputSystem.isTriggered(InputAction.IA_JUMP, PointerEventType.PET_DOWN)
-
-    if (exitKart || exitShip) {
+    if (InputState.exit) {
       mutableKart.isOccupied    = false
       mutableKart.currentSpeed  = 0
       mutableKart.isDrifting    = false
