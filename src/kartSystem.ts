@@ -344,6 +344,11 @@ export function kartMovementSystem(dt: number) {
         mutableKart.lastSafeRotY = yawShip * (180 / Math.PI)
       }
 
+      // Sincronizar estado global
+      RaceState.kartPositionX = transform.position.x
+      RaceState.kartPositionZ = transform.position.z
+      RaceState.vehicleType   = mutableKart.vehicleType
+
       // Sincronizar avatar para el minimapa
       avatarSyncTimer += dt
       if (avatarSyncTimer >= AVATAR_SYNC_INTERVAL) {
@@ -598,9 +603,10 @@ export function kartMovementSystem(dt: number) {
     transform.position.y = Math.max(lastKnownGroundY - 3.0, transform.position.y)
     transform.position.y = Math.max(0.1, transform.position.y)
 
-      // ── ACTUALIZAR ESTADO GLOBAL PARA MINIMAPA ──────────────────────────
+      // ── ACTUALIZAR ESTADO GLOBAL PARA MINIMAPA      // Compartir posición y tipo de vehículo con la UI
       RaceState.kartPositionX = transform.position.x
       RaceState.kartPositionZ = transform.position.z
+      RaceState.vehicleType   = mutableKart.vehicleType
 
       // ── SINCRONIZAR AVATAR OCULTO CON EL KART (para minimap nativo) ────
       // Cada 0.4s teletransportamos el avatar invisible a la posición del kart.

@@ -141,31 +141,40 @@ const uiComponent = () => (
     )}
 
     {/* ── BOTTOM LEFT: CONTROLS ── */}
-    <UiEntity
-      uiTransform={{
-        positionType: 'absolute',
-        position: { bottom: 32, left: 32 },
-        width: 200,
-        height: 60,
-        padding: 10,
-        flexDirection: 'column',
-        justifyContent: 'center',
-      }}
-      uiBackground={{ color: Color4.create(0, 0, 0, 0.45) }}
-    >
-      <Label
-        value="🏎️  MARIO KART DCL"
-        fontSize={13}
-        color={Color4.create(1, 0.9, 0.1, 1)}
-        uiTransform={{ width: '100%', height: 22 }}
-      />
-      <Label
-        value="[E] Salir del Kart"
-        fontSize={11}
-        color={Color4.create(0.8, 0.8, 0.8, 0.8)}
-        uiTransform={{ width: '100%', height: 18 }}
-      />
-    </UiEntity>
+    {RaceState.phase !== RacePhase.LOBBY && (
+      <UiEntity
+        uiTransform={{
+          positionType: 'absolute',
+          position: { bottom: 32, left: 32 },
+          width: 240,
+          height: RaceState.vehicleType === 'ship' ? 100 : 80,
+          padding: 10,
+          flexDirection: 'column',
+          justifyContent: 'center',
+        }}
+        uiBackground={{ color: Color4.create(0, 0, 0, 0.45) }}
+      >
+        <Label
+          value="🏎️  CONTROLES"
+          fontSize={13}
+          color={Color4.create(1, 0.9, 0.1, 1)}
+          uiTransform={{ width: '100%', height: 22 }}
+        />
+        {RaceState.vehicleType === 'kart' ? (
+          <UiEntity uiTransform={{ flexDirection: 'column', width: '100%' }}>
+            <Label value="[W A S D] Manejar" fontSize={11} color={Color4.create(0.8, 0.8, 0.8, 0.8)} uiTransform={{ width: '100%', height: 16 }} />
+            <Label value="[Espacio] Derrapar" fontSize={11} color={Color4.create(0.8, 0.8, 0.8, 0.8)} uiTransform={{ width: '100%', height: 16 }} />
+          </UiEntity>
+        ) : (
+          <UiEntity uiTransform={{ flexDirection: 'column', width: '100%' }}>
+            <Label value="[W A S D] Navegar" fontSize={11} color={Color4.create(0.8, 0.8, 0.8, 0.8)} uiTransform={{ width: '100%', height: 16 }} />
+            <Label value="[Espacio] Subir" fontSize={11} color={Color4.create(0.8, 0.8, 0.8, 0.8)} uiTransform={{ width: '100%', height: 16 }} />
+            <Label value="[F] Bajar" fontSize={11} color={Color4.create(0.8, 0.8, 0.8, 0.8)} uiTransform={{ width: '100%', height: 16 }} />
+          </UiEntity>
+        )}
+        <Label value="[E] Salir" fontSize={11} color={Color4.create(0.8, 0.8, 0.8, 0.8)} uiTransform={{ width: '100%', height: 16 }} />
+      </UiEntity>
+    )}
 
     {/* ── BOTTOM RIGHT: CUSTOM MINIMAP ── */}
     {RaceState.phase !== RacePhase.LOBBY && (() => {

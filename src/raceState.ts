@@ -17,6 +17,7 @@ export const RaceState = {
   // Posición en vivo del kart para el minimapa
   kartPositionX: 0,
   kartPositionZ: 0,
+  vehicleType: 'kart',
   
   countdownTimer: 3,  // 3... 2... 1...
   
