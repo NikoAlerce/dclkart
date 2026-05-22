@@ -315,10 +315,10 @@ export function kartMovementSystem(dt: number) {
       transform.position.x = Math.max(2, Math.min(942, transform.position.x + fwdShip.x * mutableKart.currentSpeed * dt))
       transform.position.z = Math.max(2, Math.min(494, transform.position.z + fwdShip.z * mutableKart.currentSpeed * dt))
 
-      // ── Empuje Vertical E/Q ───────────────────────────────────────────
-      const SHIP_VERT_ACCEL  = 14.0  // aceleración vertical m/s²
-      const SHIP_VERT_MAX    = 12.0  // velocidad vertical máxima
-      const SHIP_VERT_DRAG   = 0.85  // amortiguación al soltar
+      // ── Empuje Vertical R/F ───────────────────────────────────────────
+      const SHIP_VERT_ACCEL  = 45.0  // aceleración vertical m/s²
+      const SHIP_VERT_MAX    = 28.0  // velocidad vertical máxima
+      const SHIP_VERT_DRAG   = 1.5   // amortiguación al soltar (frena más rápido al soltar)
 
       if (InputState.thrustUp) {
         mutableKart.shipVertSpeed = Math.min(SHIP_VERT_MAX, mutableKart.shipVertSpeed + SHIP_VERT_ACCEL * dt)
