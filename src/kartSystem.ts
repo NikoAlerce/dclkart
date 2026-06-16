@@ -4,19 +4,78 @@ import {
   InputModifier, AvatarModifierArea,
   RaycastResult, MainCamera,
   ParticleSystem, LightSource,
-  pointerEventsSystem, MeshCollider, ColliderLayer
+  pointerEventsSystem, MeshCollider, ColliderLayer,
+  PlayerIdentityData,
+  Material, MeshRenderer
 } from '@dcl/sdk/ecs'
-import { KartData, KartOwner } from './components'
-import { Quaternion, Vector3 } from '@dcl/sdk/math'
+import { KartData, KartOwner, TurboParticle } from './components'
+import { Quaternion, Vector3, Color3, Color4 } from '@dcl/sdk/math'
 import { movePlayerTo } from '~system/RestrictedActions'
 import { kartColliderMap } from './kart'
 import { InputState } from './inputState'
-import { RaceState, RacePhase } from './raceState'
+import { RaceState } from './raceState'
 
 // ─── Estado de módulo ─────────────────────────────────────────────────────────
 let lastKnownGroundY  = 8.6
+let lastKnownGroundNormal = Vector3.Up()
+let currentGroundNormal = Vector3.Up()
 let coyoteFrames      = 0
 const COYOTE_TIME     = 6
+let turboParticleTimer = 0
+let currentYaw = 0
+let wasOccupiedLastFrame = false
+
+function spawnTurboParticle(
+  transform: { position: { x: number; y: number; z: number }; rotation: { x: number; y: number; z: number; w: number } },
+  scaleMult: number,
+  currentSpeed: number
+) {
+  const fwdVec = Vector3.rotate(Vector3.Forward(), transform.rotation)
+  const backVec = Vector3.scale(fwdVec, -1)
+  
+  // Posicionar partículas con una variación aleatoria detrás de los caños de escape
+  const exhaustOffset = Vector3.create(
+    (Math.random() - 0.5) * 0.3 * scaleMult,
+    0.2 * scaleMult,
+    -1.1 * scaleMult
+  )
+  const exhaustWorldPos = Vector3.add(
+    transform.position,
+    Vector3.rotate(exhaustOffset, transform.rotation)
+  )
+  
+  const p = engine.addEntity()
+  Transform.create(p, {
+    position: exhaustWorldPos,
+    scale: Vector3.create(0.15, 0.15, 0.15)
+  })
+  MeshRenderer.setSphere(p)
+  
+  const isRed = Math.random() > 0.45
+  const fireColor = isRed ? Color4.create(1, 0.25, 0, 1) : Color4.create(1, 0.75, 0, 1)
+  const fireEmissive = isRed ? Color3.create(2.5, 0.5, 0) : Color3.create(2.5, 1.8, 0)
+  
+  Material.setPbrMaterial(p, {
+    albedoColor: fireColor,
+    emissiveColor: fireEmissive,
+    emissiveIntensity: 6.0,
+    roughness: 1.0
+  })
+  
+  // La velocidad de las partículas hereda la velocidad del kart + empuje hacia atrás
+  const exhaustSpeed = 4.0 + Math.random() * 4.0
+  const pVelocity = Vector3.create(
+    fwdVec.x * (currentSpeed - exhaustSpeed) + (Math.random() - 0.5) * 1.5,
+    fwdVec.y * (currentSpeed - exhaustSpeed) + (Math.random() - 0.5) * 0.5,
+    fwdVec.z * (currentSpeed - exhaustSpeed) + (Math.random() - 0.5) * 1.5
+  )
+  
+  TurboParticle.create(p, {
+    velocity: pVelocity,
+    lifeTime: 0,
+    maxLife: 0.35 + Math.random() * 0.15
+  })
+}
 
 // Steering con inercia: el volante no pasa de 0 a 1 en un solo frame
 // Simula el "peso" del volante y elimina el giro brusco
@@ -50,7 +109,7 @@ let avatarSyncTimer   = 0
 const AVATAR_SYNC_INTERVAL = 0.4
 
 // Respawn: si el kart cae por debajo de esta Y, teleport al último checkpoint
-const RESPAWN_Y       = 5.0
+const RESPAWN_Y       = 3.0
 // ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -123,6 +182,7 @@ export function kartMovementSystem(dt: number) {
   InputState.drift       = inputSystem.isPressed(InputAction.IA_JUMP)
   InputState.thrustUp    = inputSystem.isPressed(InputAction.IA_PRIMARY)    // E
   InputState.thrustDown  = inputSystem.isPressed(InputAction.IA_SECONDARY)  // F
+  InputState.turbo       = inputSystem.isPressed(InputAction.IA_MODIFIER)   // Shift
 
   // ── Inercia del volante ───────────────────────────────────────────────────
   // rawSteering: señal binaria ±1 del input real
@@ -137,6 +197,20 @@ export function kartMovementSystem(dt: number) {
 
     const mutableKart = KartData.getMutable(entity)
     const transform   = Transform.getMutable(entity)
+    const scaleMult   = mutableKart.scale || 1.0
+
+    // ── 0.5 POSICIONAR SENSOR DE PISO DINÁMICAMENTE (Compensar lag de Raycast) ──
+    if (mutableKart.floorSensorEntity) {
+      const sensorT = Transform.getMutableOrNull(mutableKart.floorSensorEntity as any)
+      if (sensorT) {
+        // Adelantar el sensor según la velocidad actual del kart para compensar la latencia de 1 frame.
+        // Limitamos la compensación para evitar valores excesivos durante picos de lag.
+        const speedComp = Math.max(0, mutableKart.currentSpeed) * dt
+        const maxComp = 3.0 * scaleMult
+        const forwardLook = 0.5 * scaleMult + Math.min(speedComp, maxComp)
+        sensorT.position = Vector3.create(0, 1.5 * scaleMult, forwardLook)
+      }
+    }
 
     // ── 0. SALIR ──────────────────────────────────────────────────────────
     const isShip = mutableKart.vehicleType === 'ship'
@@ -150,12 +224,13 @@ export function kartMovementSystem(dt: number) {
       mutableKart.driftTime     = 0
       mutableKart.boostTime     = 0
       coyoteFrames              = 0
-      RaceState.phase           = RacePhase.LOBBY
+      RaceState.isOccupied      = false
       leanAngle                 = 0
       leanVelocity              = 0
       checkpointTimer           = 0
       bounceCooldown            = 0
       currentSteering           = 0
+      wasOccupiedLastFrame      = false
 
       InputModifier.deleteFrom(engine.PlayerEntity)
       AvatarModifierArea.deleteFrom(entity)
@@ -179,6 +254,14 @@ export function kartMovementSystem(dt: number) {
       if (mutableKart.wallSensorEntity) {
         engine.removeEntity(mutableKart.wallSensorEntity as any)
         mutableKart.wallSensorEntity = undefined
+      }
+      if (mutableKart.wallSensorLeftEntity) {
+        engine.removeEntity(mutableKart.wallSensorLeftEntity as any)
+        mutableKart.wallSensorLeftEntity = undefined
+      }
+      if (mutableKart.wallSensorRightEntity) {
+        engine.removeEntity(mutableKart.wallSensorRightEntity as any)
+        mutableKart.wallSensorRightEntity = undefined
       }
       if (mutableKart.sparkEntity) {
         engine.removeEntity(mutableKart.sparkEntity as any)
@@ -210,30 +293,7 @@ export function kartMovementSystem(dt: number) {
       continue
     }
 
-    // ── GESTION DE CARRERA (Timers) ───────────────────────────────────────
-    if (RaceState.phase === RacePhase.COUNTDOWN) {
-      RaceState.countdownTimer -= dt
-      if (RaceState.countdownTimer <= 0) {
-        RaceState.phase = RacePhase.RACING
-      }
-    }
-    
-    if (RaceState.showCheckpointText) {
-      RaceState.checkpointTextTimer -= dt
-      if (RaceState.checkpointTextTimer <= 0) {
-        RaceState.showCheckpointText = false
-      }
-    }
 
-    // Congelar controles si no estamos corriendo
-    const canDrive = RaceState.phase === RacePhase.RACING
-    if (!canDrive) {
-      InputState.forward = false
-      InputState.backward = false
-      InputState.left = false
-      InputState.right = false
-      InputState.drift = false
-    }
 
     // ── RESPAWN ───────────────────────────────────────────────────────────
     if (transform.position.y < RESPAWN_Y) {
@@ -263,7 +323,10 @@ export function kartMovementSystem(dt: number) {
         const floorResult = RaycastResult.getOrNull(mutableKart.floorSensorEntity as any)
         if (floorResult && floorResult.hits.length > 0) {
           const validHits = floorResult.hits.filter(h =>
-            h.entityId !== engine.PlayerEntity && h.entityId !== entity && h.position != null
+            h.entityId !== engine.PlayerEntity &&
+            !PlayerIdentityData.has(h.entityId as any) &&
+            h.entityId !== entity &&
+            h.position != null
           )
           if (validHits.length > 0) {
             validHits.sort((a, b) => (a.length ?? Infinity) - (b.length ?? Infinity))
@@ -274,8 +337,13 @@ export function kartMovementSystem(dt: number) {
       }
 
       // ── Velocidad horizontal (W/S) con inercia ─────────────────────────
+      const isTurboActive = InputState.turbo && InputState.forward
       const speedRatio   = Math.abs(mutableKart.currentSpeed) / mutableKart.maxSpeed
-      const dynamicAccel = mutableKart.acceleration * (1.0 - speedRatio * 0.45)
+      let dynamicAccel = mutableKart.acceleration * (1.0 - speedRatio * 0.45)
+
+      if (isTurboActive) {
+        dynamicAccel *= 1.8
+      }
 
       if (InputState.forward) {
         mutableKart.currentSpeed += dynamicAccel * dt
@@ -289,13 +357,22 @@ export function kartMovementSystem(dt: number) {
       // Boost post-drift también aplica en naves
       if (mutableKart.boostTime > 0) {
         mutableKart.boostTime -= dt
-        const boostCap = mutableKart.maxSpeed * 1.35
+        const boostCap = mutableKart.maxSpeed * 1.55
         mutableKart.currentSpeed = Math.min(mutableKart.currentSpeed + 55 * dt, boostCap)
       }
 
-      const boostCap    = mutableKart.maxSpeed * 1.35
+      // Si el turbo está activo y no hay boost de drift, aceleramos hacia el turboCap
+      if (isTurboActive && mutableKart.boostTime <= 0) {
+        const turboCap = mutableKart.maxSpeed * 2.1
+        mutableKart.currentSpeed = Math.min(mutableKart.currentSpeed + 90 * dt, turboCap)
+      }
+
+      const currentMaxCap = mutableKart.boostTime > 0
+        ? mutableKart.maxSpeed * 1.65
+        : (isTurboActive ? mutableKart.maxSpeed * 2.1 : mutableKart.maxSpeed)
+
       const MAX_REVERSE = -(mutableKart.maxSpeed * 0.3)
-      if (mutableKart.currentSpeed > boostCap)    mutableKart.currentSpeed = boostCap
+      if (mutableKart.currentSpeed > currentMaxCap)    mutableKart.currentSpeed = currentMaxCap
       if (mutableKart.currentSpeed < MAX_REVERSE) mutableKart.currentSpeed = MAX_REVERSE
       if (Math.abs(mutableKart.currentSpeed) < 0.05) mutableKart.currentSpeed = 0
 
@@ -349,8 +426,10 @@ export function kartMovementSystem(dt: number) {
 
       // Sincronizar estado global
       RaceState.kartPositionX = transform.position.x
+      RaceState.kartPositionY = transform.position.y
       RaceState.kartPositionZ = transform.position.z
       RaceState.vehicleType   = mutableKart.vehicleType
+      RaceState.kartSpeedRatio = sf
 
       // Sincronizar avatar para el minimapa
       avatarSyncTimer += dt
@@ -384,19 +463,77 @@ export function kartMovementSystem(dt: number) {
         if (camT) {
           const backVec = Vector3.rotate(Vector3.Backward(), transform.rotation)
           const fwdVec  = Vector3.rotate(Vector3.Forward(),  transform.rotation)
+          const turboPull = isTurboActive ? 7.5 * scaleMult : 0
           const camDist   = (9.0 + sfLean * 4.0) * scaleMult
           const idealPos  = Vector3.create(
-            transform.position.x + backVec.x * camDist,
+            transform.position.x + backVec.x * (camDist + turboPull),
             transform.position.y + 4.5 * scaleMult,
-            transform.position.z + backVec.z * camDist
+            transform.position.z + backVec.z * (camDist + turboPull)
           )
-          camT.position = lerpV3(camT.position, idealPos, Math.min(1, dt * 4.0))
+          camT.position = lerpV3(camT.position, idealPos, Math.min(1, dt * (isTurboActive ? 2.0 : 4.0)))
+          
+          // Agregar sacudida de cámara (shake) por vibración de motor a alta velocidad
+          const speedRatio = sfLean
+          let shakeAmp = 0
+          if (isTurboActive) {
+            shakeAmp = 0.22 * scaleMult
+          } else if (mutableKart.boostTime > 0) {
+            shakeAmp = 0.15 * scaleMult
+          } else if (speedRatio > 0.9) {
+            shakeAmp = 0.05 * (speedRatio - 0.9) * 10 * scaleMult
+          }
+          
+          if (shakeAmp > 0) {
+            const shakeX = (Math.random() - 0.5) * shakeAmp
+            const shakeY = (Math.random() - 0.5) * shakeAmp
+            const shakeZ = (Math.random() - 0.5) * shakeAmp
+            camT.position = Vector3.create(
+              camT.position.x + shakeX,
+              camT.position.y + shakeY,
+              camT.position.z + shakeZ
+            )
+          }
+
           const lookTarget = Vector3.create(
             transform.position.x + fwdVec.x * sfLean * 4.0 * scaleMult,
             transform.position.y + 1.0 * scaleMult,
             transform.position.z + fwdVec.z * sfLean * 4.0 * scaleMult
           )
           camT.rotation = nlerp(camT.rotation, computeLookAt(camT.position, lookTarget), Math.min(1, dt * 7.0))
+        }
+      }
+
+      // Sincronizar estado global para el Turbo
+      RaceState.isTurboActive = isTurboActive
+
+      // ── Partículas de Turbo (Custom + Native fallback) para Naves ────
+      if (isTurboActive) {
+        turboParticleTimer += dt
+        if (turboParticleTimer >= 0.03) {
+          turboParticleTimer = 0
+          spawnTurboParticle(transform, scaleMult, mutableKart.currentSpeed)
+        }
+      }
+
+      if (mutableKart.sparkEntity) {
+        const ps = ParticleSystem.getMutableOrNull(mutableKart.sparkEntity as any)
+        if (ps) {
+          ps.active = isTurboActive
+          ps.rate   = isTurboActive ? 80 : 0
+          if (isTurboActive) {
+            ps.initialColor = {
+              start: { r: 1.0, g: 0.2, b: 0.0, a: 1.0 },
+              end:   { r: 1.0, g: 0.7, b: 0.1, a: 0.2 }
+            }
+          }
+        }
+        const ls = LightSource.getMutableOrNull(mutableKart.sparkEntity as any)
+        if (ls) {
+          ls.active    = isTurboActive
+          ls.intensity = isTurboActive ? 3500 + Math.sin(Date.now() / 75) * 900 : 0
+          if (isTurboActive) {
+            ls.color = { r: 1.0, g: 0.2, b: 0.0 }
+          }
         }
       }
 
@@ -412,19 +549,36 @@ export function kartMovementSystem(dt: number) {
       if (floorResult && floorResult.hits.length > 0) {
         const validHits = floorResult.hits.filter(hit =>
           hit.entityId !== engine.PlayerEntity &&
+          !PlayerIdentityData.has(hit.entityId as any) &&
           hit.entityId !== entity &&
           hit.position != null
         )
         if (validHits.length > 0) {
           validHits.sort((a, b) => (a.length ?? Infinity) - (b.length ?? Infinity))
-          const scaleMult = mutableKart.scale || 1.0
-          const KART_ROOF_Y = transform.position.y + 1.5 * scaleMult
           for (const hit of validHits) {
-            if (hit.position && hit.position.y <= KART_ROOF_Y) {
-              lastKnownGroundY = hit.position.y
-              isGrounded       = true
-              coyoteFrames     = 0
-              break
+            if (hit.position) {
+              const normalY = hit.normalHit ? hit.normalHit.y : 1.0
+              // Filtramos superficies no transitables (ej: paredes verticales o columnas con normalY <= 0.55)
+              if (normalY > 0.55) {
+                let projectedGroundY = hit.position.y
+                // Proyectar geométricamente la Y de colisión hacia el centro del kart usando la normal
+                if (hit.normalHit && hit.normalHit.y > 0.7) {
+                  const N = hit.normalHit
+                  const dx = transform.position.x - hit.position.x
+                  const dz = transform.position.z - hit.position.z
+                  projectedGroundY = hit.position.y - (N.x * dx + N.z * dz) / N.y
+                  
+                  lastKnownGroundY = projectedGroundY
+                  lastKnownGroundNormal = hit.normalHit
+                } else {
+                  lastKnownGroundY = hit.position.y
+                  if (hit.normalHit) lastKnownGroundNormal = hit.normalHit
+                }
+                
+                isGrounded       = true
+                coyoteFrames     = 0
+                break
+              }
             }
           }
         }
@@ -436,26 +590,38 @@ export function kartMovementSystem(dt: number) {
       if (coyoteFrames <= COYOTE_TIME) isGrounded = true
     }
 
+    // Lerpear la normal del suelo para suavizar la alineación
+    const targetNormal = isGrounded ? lastKnownGroundNormal : Vector3.Up()
+    currentGroundNormal = Vector3.create(
+      currentGroundNormal.x + (targetNormal.x - currentGroundNormal.x) * Math.min(1.0, dt * 15.0),
+      currentGroundNormal.y + (targetNormal.y - currentGroundNormal.y) * Math.min(1.0, dt * 15.0),
+      currentGroundNormal.z + (targetNormal.z - currentGroundNormal.z) * Math.min(1.0, dt * 15.0)
+    )
+    currentGroundNormal = Vector3.normalize(currentGroundNormal)
+
     // ── 2. SENSOR DE PARED (con cooldown anti-atasco) ─────────────────────
     if (bounceCooldown > 0) bounceCooldown -= dt
 
     if (mutableKart.wallSensorEntity && bounceCooldown <= 0) {
       const wallResult = RaycastResult.getOrNull(mutableKart.wallSensorEntity as any)
+      const wallResultLeft = mutableKart.wallSensorLeftEntity ? RaycastResult.getOrNull(mutableKart.wallSensorLeftEntity as any) : null
+      const wallResultRight = mutableKart.wallSensorRightEntity ? RaycastResult.getOrNull(mutableKart.wallSensorRightEntity as any) : null
 
-      if (wallResult && wallResult.hits.length > 0) {
+      const allHits: any[] = []
+      if (wallResult && wallResult.hits) allHits.push(...wallResult.hits)
+      if (wallResultLeft && wallResultLeft.hits) allHits.push(...wallResultLeft.hits)
+      if (wallResultRight && wallResultRight.hits) allHits.push(...wallResultRight.hits)
+
+      if (allHits.length > 0) {
         let isCheckpoint = false
         let closestWallHit = null
 
         // ── PROCESAR TODOS LOS IMPACTOS (QUERY_ALL) ──────────────────────────
-        for (const hit of wallResult.hits) {
+        for (const hit of allHits) {
           const meshName = hit.meshName || ''
           const lowerName = meshName.toLowerCase()
           
           if (lowerName.includes('checkpoint')) {
-            const match = lowerName.match(/checkpoint_(\d+)/)
-            if (match) {
-              RaceState.passCheckpoint(parseInt(match[1]))
-            }
             isCheckpoint = true
           } else {
             // Buscamos la pared física válida más cercana
@@ -466,38 +632,86 @@ export function kartMovementSystem(dt: number) {
                 if (hitT && hitT.parent === entity) isKartChild = true
               }
               
-              if (!isKartChild && hit.entityId !== entity && hit.entityId !== engine.PlayerEntity) {
+              // Filtro de altura: el impacto debe estar a una altura que el cuerpo físico del kart realmente choque
+              // Evita rebotar contra vigas elevadas, techos o puentes por debajo de los cuales pasa el auto
+              const hitY = hit.position ? hit.position.y : 0
+              const isWithinKartHeight = hit.position && (hitY <= transform.position.y + 0.95 * scaleMult)
+
+              if (!isKartChild && hit.entityId !== entity && hit.entityId !== engine.PlayerEntity && !PlayerIdentityData.has(hit.entityId as any) && isWithinKartHeight) {
                 closestWallHit = hit
               }
             }
           }
         }
 
-        // ── APLICAR REBOTE SI HAY UNA PARED VÁLIDA ────────────────────────
-        if (closestWallHit && !isCheckpoint) {
-          // Ampliamos el rango de normal (< 0.9) para rebotar contra paredes inclinadas.
+        // ── ACTUALIZAR VARIABLES DE DEPURACIÓN ──
+        if (closestWallHit) {
           const normalY = closestWallHit.normalHit ? Math.abs(closestWallHit.normalHit.y) : 1
-          const isWall = normalY < 0.9
+          const isWall = normalY < 0.65
+          RaceState.debugLastWallHitName = closestWallHit.meshName || 'Unnamed'
+          RaceState.debugLastWallHitDist = closestWallHit.length || 0
+          RaceState.debugLastWallHitY = closestWallHit.position ? closestWallHit.position.y : 0
+          RaceState.debugLastWallHitNormalY = closestWallHit.normalHit ? closestWallHit.normalHit.y : 1
+          RaceState.debugLastWallHitIsWall = isWall
+        } else {
+          RaceState.debugLastWallHitName = 'None'
+          RaceState.debugLastWallHitDist = 0
+          RaceState.debugLastWallHitY = 0
+          RaceState.debugLastWallHitNormalY = 0
+          RaceState.debugLastWallHitIsWall = false
+        }
 
-          const scaleMult = mutableKart.scale || 1.0
-          if (isWall && closestWallHit.length != null && closestWallHit.length < 2.5 * scaleMult) {
-            mutableKart.currentSpeed = -mutableKart.currentSpeed * 0.35
-            const bwd = Vector3.rotate(Vector3.Backward(), transform.rotation)
-            transform.position.x += bwd.x * 0.8 * scaleMult
-            transform.position.z += bwd.z * 0.8 * scaleMult
-            bounceCooldown = BOUNCE_COOLDOWN
-            
-            leanVelocity = 0
-            
-            bounceCooldown = 0.5 // medio segundo de invulnerabilidad
+        // ── APLICAR REBOTE SI HAY UNA PARED VÁLIDA O INCLINAR SI ES RAMPA ──
+        if (closestWallHit && !isCheckpoint) {
+          const normalY = closestWallHit.normalHit ? Math.abs(closestWallHit.normalHit.y) : 1
+          const isWall = normalY < 0.65
+
+          if (isWall) {
+            if (closestWallHit.length != null && closestWallHit.length < 0.65 * scaleMult) {
+              console.log(`[COLLISION] BOUNCE! Mesh: ${closestWallHit.meshName}, dist: ${closestWallHit.length.toFixed(2)}, hitY: ${closestWallHit.position?.y.toFixed(2)}, normY: ${closestWallHit.normalHit?.y.toFixed(2)}`)
+              mutableKart.currentSpeed = -mutableKart.currentSpeed * 0.35
+              const bwd = Vector3.rotate(Vector3.Backward(), transform.rotation)
+              transform.position.x += bwd.x * 0.45 * scaleMult
+              transform.position.z += bwd.z * 0.45 * scaleMult
+              bounceCooldown = BOUNCE_COOLDOWN
+              
+              leanVelocity = 0
+              
+              bounceCooldown = 0.5 // medio segundo de invulnerabilidad
+            }
+          } else {
+            // Es una pendiente transitable chocado por el sensor de pared
+            // Esto evita que traspase el suelo al subir cuestas empinadas a gran velocidad
+            let projectedGroundY = closestWallHit.position.y
+            if (closestWallHit.normalHit && closestWallHit.normalHit.y > 0.1) {
+              const N = closestWallHit.normalHit
+              const dx = transform.position.x - closestWallHit.position.x
+              const dz = transform.position.z - closestWallHit.position.z
+              projectedGroundY = closestWallHit.position.y - (N.x * dx + N.z * dz) / N.y
+            }
+            lastKnownGroundY = Math.max(lastKnownGroundY, projectedGroundY)
+            isGrounded = true
+            coyoteFrames = 0
           }
         }
+      } else {
+        RaceState.debugLastWallHitName = 'None'
+        RaceState.debugLastWallHitDist = 0
+        RaceState.debugLastWallHitY = 0
+        RaceState.debugLastWallHitNormalY = 0
+        RaceState.debugLastWallHitIsWall = false
       }
     }
 
     // ── 3. ACELERACIÓN (curva dinámica) ───────────────────────────────────
+    const isTurboActive = InputState.turbo && InputState.forward
     const speedRatio   = Math.abs(mutableKart.currentSpeed) / mutableKart.maxSpeed
-    const dynamicAccel = mutableKart.acceleration * (1.0 - speedRatio * 0.55)
+    let dynamicAccel = mutableKart.acceleration * (1.0 - speedRatio * 0.55)
+
+    if (isTurboActive) {
+      dynamicAccel *= 1.8
+    }
+
     let isAccelerating = false
 
     if (InputState.forward) {
@@ -513,18 +727,36 @@ export function kartMovementSystem(dt: number) {
     // ── 4. BOOST POST-DRIFT ───────────────────────────────────────────────
     if (mutableKart.boostTime > 0) {
       mutableKart.boostTime -= dt
-      const boostCap = mutableKart.maxSpeed * 1.45
+      const boostCap = mutableKart.maxSpeed * 1.65
       mutableKart.currentSpeed = Math.min(mutableKart.currentSpeed + 60 * dt, boostCap)
       isAccelerating = true
     }
 
-    const boostCap    = mutableKart.maxSpeed * 1.45
+    // Si el turbo está activo y no hay boost de drift, aceleramos hacia el turboCap
+    if (isTurboActive && mutableKart.boostTime <= 0) {
+      const turboCap = mutableKart.maxSpeed * 2.1
+      mutableKart.currentSpeed = Math.min(mutableKart.currentSpeed + 90 * dt, turboCap)
+      isAccelerating = true
+    }
+
+    const currentMaxCap = mutableKart.boostTime > 0
+      ? mutableKart.maxSpeed * 1.65
+      : (isTurboActive ? mutableKart.maxSpeed * 2.1 : mutableKart.maxSpeed)
+
     const MAX_REVERSE = -(mutableKart.maxSpeed * 0.35)
-    if (mutableKart.currentSpeed > boostCap)    mutableKart.currentSpeed = boostCap
+    if (mutableKart.currentSpeed > currentMaxCap)    mutableKart.currentSpeed = currentMaxCap
     if (mutableKart.currentSpeed < MAX_REVERSE) mutableKart.currentSpeed = MAX_REVERSE
     if (!isAccelerating && Math.abs(mutableKart.currentSpeed) < 0.05) mutableKart.currentSpeed = 0
 
     // ── 5. DRIFT + GIRO CON INERCIA ───────────────────────────────────────
+    // Inicializar el rumbo Y limpio al subir al auto
+    if (!wasOccupiedLastFrame) {
+      wasOccupiedLastFrame = true
+      const q_init = transform.rotation
+      const yaw_init = Math.atan2(2 * (q_init.w * q_init.y + q_init.x * q_init.z), 1 - 2 * (q_init.y * q_init.y + q_init.z * q_init.z))
+      currentYaw = yaw_init * (180 / Math.PI)
+    }
+
     const isTurningRaw = InputState.left || InputState.right  // Señal cruda para drift
     const driftHeld    = InputState.drift
     const speedOk      = Math.abs(mutableKart.currentSpeed) > mutableKart.maxSpeed * 0.25
@@ -540,25 +772,18 @@ export function kartMovementSystem(dt: number) {
       // Rampa suave para la rotación física del drift (tarda 0.6s en llegar al radio máximo)
       const driftPhysProgression = Math.min(1.0, mutableKart.driftTime / 0.6)
       const revMod   = mutableKart.currentSpeed < 0 ? -1 : 1
-      const rotDelta = Quaternion.fromEulerDegrees(
-        0,
-        mutableKart.driftDirection * mutableKart.turnSpeed * 0.42 * driftPhysProgression * revMod * dt,
-        0
-      )
-      transform.rotation = Quaternion.multiply(transform.rotation, rotDelta)
+      currentYaw += mutableKart.driftDirection * mutableKart.turnSpeed * 0.42 * driftPhysProgression * revMod * dt
+      
       if (!isAccelerating) mutableKart.currentSpeed *= (1 - 1.6 * dt)
 
     } else {
       // ── Giro normal con inercia del volante ──────────────────────────────
-      // currentSteering ya viene suavizado desde el inicio del frame
       if (mutableKart.currentSpeed !== 0 && Math.abs(currentSteering) > 0.02) {
-        const sf       = Math.abs(mutableKart.currentSpeed) / mutableKart.maxSpeed
-        // Curva arcade: mayor giro a baja velocidad (x1.6), muy similar a alta velocidad (x1.4)
-        const speedCurve = 1.6 - (sf * 0.2)
+        const sfTurn   = Math.abs(mutableKart.currentSpeed) / mutableKart.maxSpeed
+        const speedCurve = 1.6 - (sfTurn * 0.2)
         const dynTurn  = mutableKart.turnSpeed * speedCurve
         const revMod   = mutableKart.currentSpeed < 0 ? -1 : 1
-        const rotDelta = Quaternion.fromEulerDegrees(0, currentSteering * dynTurn * revMod * dt, 0)
-        transform.rotation = Quaternion.multiply(transform.rotation, rotDelta)
+        currentYaw += currentSteering * dynTurn * revMod * dt
       }
 
       // Fin de drift → boost
@@ -571,11 +796,17 @@ export function kartMovementSystem(dt: number) {
       }
     }
 
-    // Normalizar al eje Y (evita pitch/roll acumulado en el quaternión)
-    const q      = transform.rotation
-    const yaw    = Math.atan2(2 * (q.w * q.y + q.x * q.z), 1 - 2 * (q.y * q.y + q.z * q.z))
-    const yawDeg = yaw * (180 / Math.PI)
-    transform.rotation = Quaternion.fromEulerDegrees(0, yawDeg, 0)
+    // ── 5.5 ALINEAR CON EL TERRENO (PITCH & ROLL) ──────────────────────────
+    const baseRotation = Quaternion.fromEulerDegrees(0, currentYaw, 0)
+    const baseFwd = Vector3.rotate(Vector3.Forward(), baseRotation)
+    
+    // Proyectar el rumbo hacia el plano del terreno para evitar que el auto doble solo en bajadas
+    let R = Vector3.cross(currentGroundNormal, baseFwd)
+    R = Vector3.normalize(R)
+    let F_aligned = Vector3.cross(R, currentGroundNormal)
+    F_aligned = Vector3.normalize(F_aligned)
+    
+    transform.rotation = Quaternion.lookRotation(F_aligned, currentGroundNormal)
 
     // ── 6. MOVIMIENTO ─────────────────────────────────────────────────────
     const fwd = Vector3.rotate(Vector3.Forward(), transform.rotation)
@@ -595,21 +826,28 @@ export function kartMovementSystem(dt: number) {
     transform.position.x = Math.max(2, Math.min(942, transform.position.x + moveX))
     transform.position.z = Math.max(2, Math.min(494, transform.position.z + moveZ))
 
-    // ── 7. GRAVEDAD ───────────────────────────────────────────────────────
-    const scaleMult = mutableKart.scale || 1.0
+    // ── 7. GRAVEDAD Y SEGUIMIENTO DE TERRENO ──────────────────────────────
     const targetY = lastKnownGroundY + 0.05 * scaleMult
     if (isGrounded) {
-      transform.position.y += (targetY - transform.position.y) * 0.6
+      if (targetY > transform.position.y) {
+        // En subidas, snap instantáneo para evitar atravesar el terreno
+        transform.position.y = targetY
+      } else {
+        // En bajadas, seguir el terreno con suavidad rápida para mantener adherencia
+        transform.position.y += (targetY - transform.position.y) * Math.min(1.0, dt * 35.0)
+      }
     } else {
-      transform.position.y -= 9.8 * dt
+      // Gravedad al estar en el aire (vuelo libre)
+      transform.position.y -= 12.0 * dt
     }
-    transform.position.y = Math.max(lastKnownGroundY - 3.0, transform.position.y)
     transform.position.y = Math.max(0.1, transform.position.y)
 
       // ── ACTUALIZAR ESTADO GLOBAL PARA MINIMAPA      // Compartir posición y tipo de vehículo con la UI
       RaceState.kartPositionX = transform.position.x
+      RaceState.kartPositionY = transform.position.y
       RaceState.kartPositionZ = transform.position.z
       RaceState.vehicleType   = mutableKart.vehicleType
+      RaceState.kartSpeedRatio = Math.abs(mutableKart.currentSpeed) / mutableKart.maxSpeed
 
       // ── SINCRONIZAR AVATAR OCULTO CON EL KART (para minimap nativo) ────
       // Cada 0.4s teletransportamos el avatar invisible a la posición del kart.
@@ -633,7 +871,7 @@ export function kartMovementSystem(dt: number) {
         mutableKart.lastSafeX    = transform.position.x
         mutableKart.lastSafeY    = transform.position.y
         mutableKart.lastSafeZ    = transform.position.z
-        mutableKart.lastSafeRotY = yawDeg
+        mutableKart.lastSafeRotY = currentYaw
       }
     }
 
@@ -675,37 +913,53 @@ export function kartMovementSystem(dt: number) {
       }
     }
 
-    // ── 9b. CHISPAS DE DRIFT + LUZ PULSANTE ──────────────────────────────────
-    // Color como Mario Kart: Blanco/amarillo → Naranja → Azul/morado
+    // ── 9b. CHISPAS DE DRIFT / TURBO + LUZ PULSANTE ──────────────────────────
+    // Color como Mario Kart: Blanco/amarillo → Naranja → Azul/morado para drift, rojo/naranja para turbo.
     if (mutableKart.sparkEntity) {
       const ps = ParticleSystem.getMutableOrNull(mutableKart.sparkEntity as any)
+      const isTurboActive = InputState.turbo && InputState.forward
+      
       if (ps) {
-        ps.active = mutableKart.isDrifting
-        ps.rate   = mutableKart.isDrifting ? 55 : 0
-        if (mutableKart.driftTime > 2.2) {
-          // Ultra Mini-Turbo — Azul/morado
-          ps.initialColor = { start: { r: 0.4, g: 0.2, b: 1.0, a: 1 }, end: { r: 0.8, g: 0.5, b: 1.0, a: 1 } }
-        } else if (mutableKart.driftTime > 0.9) {
-          // Super Mini-Turbo — Naranja
-          ps.initialColor = { start: { r: 1.0, g: 0.4, b: 0.0, a: 1 }, end: { r: 1.0, g: 0.7, b: 0.1, a: 1 } }
-        } else {
-          // Mini-Turbo — Blanco/amarillo
-          ps.initialColor = { start: { r: 1.0, g: 0.85, b: 0.2, a: 1 }, end: { r: 1.0, g: 1.0, b: 0.5, a: 1 } }
+        ps.active = mutableKart.isDrifting || isTurboActive
+        ps.rate   = mutableKart.isDrifting ? 55 : (isTurboActive ? 80 : 0)
+        
+        if (isTurboActive && !mutableKart.isDrifting) {
+          // Partículas de Turbo (Fuego)
+          ps.initialColor = {
+            start: { r: 1.0, g: 0.2, b: 0.0, a: 1.0 },
+            end:   { r: 1.0, g: 0.7, b: 0.1, a: 0.2 }
+          }
+        } else if (mutableKart.isDrifting) {
+          if (mutableKart.driftTime > 2.2) {
+            // Ultra Mini-Turbo — Azul/morado
+            ps.initialColor = { start: { r: 0.4, g: 0.2, b: 1.0, a: 1 }, end: { r: 0.8, g: 0.5, b: 1.0, a: 1 } }
+          } else if (mutableKart.driftTime > 0.9) {
+            // Super Mini-Turbo — Naranja
+            ps.initialColor = { start: { r: 1.0, g: 0.4, b: 0.0, a: 1 }, end: { r: 1.0, g: 0.7, b: 0.1, a: 1 } }
+          } else {
+            // Mini-Turbo — Blanco/amarillo
+            ps.initialColor = { start: { r: 1.0, g: 0.85, b: 0.2, a: 1 }, end: { r: 1.0, g: 1.0, b: 0.5, a: 1 } }
+          }
         }
       }
 
       const ls = LightSource.getMutableOrNull(mutableKart.sparkEntity as any)
       if (ls) {
-        ls.active    = mutableKart.isDrifting
-        ls.intensity = mutableKart.isDrifting
+        ls.active    = mutableKart.isDrifting || isTurboActive
+        ls.intensity = (mutableKart.isDrifting || isTurboActive)
           ? 3500 + Math.sin(Date.now() / 75) * 900   // pulso rápido
           : 0
-        if (mutableKart.driftTime > 2.2) {
-          ls.color = { r: 0.5, g: 0.2, b: 1.0 }   // morado
-        } else if (mutableKart.driftTime > 0.9) {
-          ls.color = { r: 1.0, g: 0.4, b: 0.0 }   // naranja
-        } else {
-          ls.color = { r: 1.0, g: 0.85, b: 0.2 }  // amarillo
+          
+        if (isTurboActive && !mutableKart.isDrifting) {
+          ls.color = { r: 1.0, g: 0.2, b: 0.0 }   // rojo fuego
+        } else if (mutableKart.isDrifting) {
+          if (mutableKart.driftTime > 2.2) {
+            ls.color = { r: 0.5, g: 0.2, b: 1.0 }   // morado
+          } else if (mutableKart.driftTime > 0.9) {
+            ls.color = { r: 1.0, g: 0.4, b: 0.0 }   // naranja
+          } else {
+            ls.color = { r: 1.0, g: 0.85, b: 0.2 }  // amarillo
+          }
         }
       }
     }
@@ -714,27 +968,49 @@ export function kartMovementSystem(dt: number) {
     // La cámara vive en espacio mundial (sin parent).
     // Cada frame: calculamos dónde DEBERÍA estar y la interpolamos hacia allí.
     //
-    // Factor de posición 4.5 → la cámara alcanza el punto ideal en ~0.4s
+    // Factor de posición 4.5 → la cámara alcanza el punto ideal en ~0.4s (se reduce en turbo para dar más lag visual)
     // Factor de rotación 8.0 → mira al kart más rápido que se mueve
     if (mutableKart.cameraPivotEntity) {
       const camT = Transform.getMutableOrNull(mutableKart.cameraPivotEntity as any)
       if (camT) {
-        const scaleMult = mutableKart.scale || 1.0
         const backVec = Vector3.rotate(Vector3.Backward(), transform.rotation)
         const fwdVec  = Vector3.rotate(Vector3.Forward(),  transform.rotation)
 
         // Distancia dinámica escalada
         const camDist   = (7.0 + sf * 3.0) * scaleMult
-        // Pull-back extra durante boost escalado
-        const boostPull = mutableKart.boostTime > 0 ? mutableKart.boostTime * 1.5 * scaleMult : 0
+        // Pull-back extra durante boost o turbo activo
+        const turboPull = isTurboActive ? 6.5 * scaleMult : 0
+        const boostPull = (mutableKart.boostTime > 0 ? mutableKart.boostTime * 1.5 * scaleMult : 0) + turboPull
 
         const idealPos  = Vector3.create(
           transform.position.x + backVec.x * (camDist + boostPull),
-          transform.position.y + (3.2 + sf * 0.8) * scaleMult,
+          transform.position.y + (3.2 + sf * 0.8) * scaleMult + (isTurboActive ? 0.3 * scaleMult : 0),
           transform.position.z + backVec.z * (camDist + boostPull)
         )
-        const posFactor = Math.min(1, dt * 4.5)
+        const posFactor = Math.min(1, dt * (isTurboActive ? 2.5 : 4.5))
         camT.position   = lerpV3(camT.position, idealPos, posFactor)
+
+        // Agregar sacudida de cámara (shake) por vibración de motor a alta velocidad
+        const speedRatio = sf
+        let shakeAmp = 0
+        if (isTurboActive) {
+          shakeAmp = 0.22 * scaleMult
+        } else if (mutableKart.boostTime > 0) {
+          shakeAmp = 0.15 * scaleMult
+        } else if (speedRatio > 0.9) {
+          shakeAmp = 0.05 * (speedRatio - 0.9) * 10 * scaleMult
+        }
+        
+        if (shakeAmp > 0) {
+          const shakeX = (Math.random() - 0.5) * shakeAmp
+          const shakeY = (Math.random() - 0.5) * shakeAmp
+          const shakeZ = (Math.random() - 0.5) * shakeAmp
+          camT.position = Vector3.create(
+            camT.position.x + shakeX,
+            camT.position.y + shakeY,
+            camT.position.z + shakeZ
+          )
+        }
 
         // Look-ahead escalado: la cámara mira hacia adelante del kart
         const lookTarget = Vector3.create(
@@ -746,6 +1022,39 @@ export function kartMovementSystem(dt: number) {
         const rotFactor = Math.min(1, dt * 8.0)
         camT.rotation   = nlerp(camT.rotation, targetRot, rotFactor)
       }
+    }
+
+    // Sincronizar estado global para el Turbo
+    RaceState.isTurboActive = isTurboActive
+
+    // ── Partículas de Turbo (Custom) para Karts ──────────────────────
+    if (isTurboActive) {
+      turboParticleTimer += dt
+      if (turboParticleTimer >= 0.03) {
+        turboParticleTimer = 0
+        spawnTurboParticle(transform, scaleMult, mutableKart.currentSpeed)
+      }
+    }
+  }
+}
+
+export function turboParticleSystem(dt: number) {
+  for (const [entity, particle, transform] of engine.getEntitiesWith(TurboParticle, Transform)) {
+    const mutableTransform = Transform.getMutable(entity)
+    const mutableParticle = TurboParticle.getMutable(entity)
+    
+    // Mover la partícula hacia atrás
+    mutableTransform.position = Vector3.add(mutableTransform.position, Vector3.scale(particle.velocity, dt))
+    
+    // Escalar la partícula hacia abajo según su vida
+    mutableParticle.lifeTime += dt
+    const ratio = 1.0 - (mutableParticle.lifeTime / particle.maxLife)
+    if (ratio <= 0) {
+      engine.removeEntity(entity)
+    } else {
+      // Las partículas se expanden visualmente a medida que se dispersan en el aire
+      const size = (0.4 + (1.0 - ratio) * 1.25) * 0.4
+      mutableTransform.scale = Vector3.create(size, size, size)
     }
   }
 }

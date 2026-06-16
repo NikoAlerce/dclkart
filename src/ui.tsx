@@ -1,147 +1,114 @@
 import ReactEcs, { Label, ReactEcsRenderer, UiEntity } from '@dcl/sdk/react-ecs'
 import { Color4 } from '@dcl/sdk/math'
-import { InputState } from './inputState'
-import { RaceState, RacePhase } from './raceState'
+import { engine, Transform } from '@dcl/sdk/ecs'
+import { RaceState } from './raceState'
 
 export function setupUi() {
   ReactEcsRenderer.setUiRenderer(uiComponent)
 }
 
-const uiComponent = () => (
-  <UiEntity
-    uiTransform={{ width: '100%', height: '100%', flexDirection: 'column' }}
-  >
-    {/* ── CENTRAL SPLASH SCREENS (COUNTDOWN & FINISH) ── */}
-    {RaceState.phase === RacePhase.COUNTDOWN && (
-      <UiEntity
-        uiTransform={{
-          positionType: 'absolute',
-          position: { top: '25%', left: '50%' },
-          margin: { left: -200 }, // Center horizontally (width 400 / 2)
-          width: 400,
-          height: 220,
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
-          padding: 20
-        }}
-        uiBackground={{
-          color: Color4.create(0.05, 0.05, 0.05, 0.95), // Darker, sleeker background
-        }}
-      >
-        {/* Glow Top Accent */}
-        <UiEntity uiTransform={{ width: '100%', height: 4, positionType: 'absolute', position: { top: 0 } }} uiBackground={{ color: Color4.create(0.2, 0.8, 1.0, 1) }} />
-        
-        {/* Luces del Semáforo Premium */}
-        <UiEntity
-          uiTransform={{ width: '80%', height: 70, flexDirection: 'row', justifyContent: 'space-between', margin: { bottom: 25, top: 10 } }}
-        >
-          {/* Luz Roja */}
-          <UiEntity 
-            uiTransform={{ width: 60, height: 60 }} 
-            uiBackground={{ color: RaceState.countdownTimer > 2 ? Color4.create(1, 0.2, 0.2, 1) : Color4.create(0.1, 0, 0, 1) }} 
-          />
-          {/* Luz Amarilla */}
-          <UiEntity 
-            uiTransform={{ width: 60, height: 60 }} 
-            uiBackground={{ color: RaceState.countdownTimer <= 2 && RaceState.countdownTimer > 1 ? Color4.create(1, 0.9, 0.1, 1) : Color4.create(0.1, 0.1, 0, 1) }} 
-          />
-          {/* Luz Verde */}
-          <UiEntity 
-            uiTransform={{ width: 60, height: 60 }} 
-            uiBackground={{ color: RaceState.countdownTimer <= 1 ? Color4.create(0.1, 1, 0.3, 1) : Color4.create(0, 0.1, 0, 1) }} 
-          />
-        </UiEntity>
+const uiComponent = () => {
+  const playerTransform = Transform.has(engine.PlayerEntity) ? Transform.get(engine.PlayerEntity) : undefined
+  const posX = playerTransform ? playerTransform.position.x.toFixed(2) : '0.00'
+  const posY = playerTransform ? playerTransform.position.y.toFixed(2) : '0.00'
+  const posZ = playerTransform ? playerTransform.position.z.toFixed(2) : '0.00'
 
-        <Label
-          value={Math.ceil(RaceState.countdownTimer) > 0 ? Math.ceil(RaceState.countdownTimer).toString() : "GO!"}
-          fontSize={100}
-          color={Math.ceil(RaceState.countdownTimer) > 0 ? Color4.create(1, 1, 1, 0.9) : Color4.create(0.1, 1, 0.3, 1)}
-          textAlign="middle-center"
-        />
-      </UiEntity>
-    )}
-
-    {RaceState.phase === RacePhase.FINISHED && (
-      <UiEntity
-        uiTransform={{
-          positionType: 'absolute',
-          position: { top: '40%', left: '0%' },
-          width: '100%',
-          height: 200,
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center'
-        }}
-      >
-        <Label
-          value="FINISH!"
-          fontSize={100}
-          color={Color4.Yellow()}
-          textAlign="middle-center"
-        />
-      </UiEntity>
-    )}
-
-    {/* ── CHECKPOINT POPUP ── */}
-    {RaceState.showCheckpointText && (
-      <UiEntity
-        uiTransform={{
-          positionType: 'absolute',
-          position: { top: '20%', left: '50%' },
-          margin: { left: -250 },
-          width: 500,
-          height: 100,
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center'
-        }}
-      >
-        <Label
-          value={`CHECKPOINT ${RaceState.currentLapCheckpoints.size}/${RaceState.totalCheckpoints}`}
-          fontSize={50}
-          color={Color4.create(1, 0.8, 0.1, 1)} // Vibrant arcade yellow
-          textAlign="middle-center"
-        />
-      </UiEntity>
-    )}
-
-    {/* ── TOP RIGHT: LAPS ── */}
-    {RaceState.phase !== RacePhase.LOBBY && (
+  return (
+    <UiEntity
+      uiTransform={{ width: '100%', height: '100%', flexDirection: 'column' }}
+    >
+      {/* ── TOP RIGHT: COORDINATES DIAGNOSTIC PANEL ── */}
       <UiEntity
         uiTransform={{
           positionType: 'absolute',
           position: { top: 32, right: 32 },
-          width: 200,
-          height: 70,
+          width: 240,
+          height: 110,
+          padding: 8,
+          flexDirection: 'column',
+          justifyContent: 'center',
+        }}
+        uiBackground={{ color: Color4.create(0.05, 0.05, 0.1, 0.8) }}
+      >
+        <Label
+          value="👤 AVATAR COORDINATES"
+          fontSize={10}
+          color={Color4.create(0.4, 0.8, 1, 1)}
+          uiTransform={{ width: '100%', height: 16 }}
+        />
+        <Label
+          value={`X: ${posX}  Y: ${posY}  Z: ${posZ}`}
+          fontSize={11}
+          color={Color4.create(1, 1, 1, 1)}
+          uiTransform={{ width: '100%', height: 18 }}
+        />
+        
+        {/* Separator line */}
+        <UiEntity uiTransform={{ width: '100%', height: 1, margin: { top: 4, bottom: 4 } }} uiBackground={{ color: Color4.create(1, 1, 1, 0.1) }} />
+        
+        <Label
+          value="🛤️ TRACK ENTITY POSITION"
+          fontSize={10}
+          color={Color4.create(0.4, 1, 0.5, 1)}
+          uiTransform={{ width: '100%', height: 16 }}
+        />
+        <Label
+          value={`X: ${RaceState.trackX.toFixed(2)}  Y: ${RaceState.trackY.toFixed(2)}  Z: ${RaceState.trackZ.toFixed(2)}`}
+          fontSize={11}
+          color={Color4.create(1, 1, 1, 1)}
+          uiTransform={{ width: '100%', height: 18 }}
+        />
+      </UiEntity>
+
+      {/* ── TOP LEFT: DEBUG PANEL ── */}
+      {RaceState.isOccupied && (
+      <UiEntity
+        uiTransform={{
+          positionType: 'absolute',
+          position: { top: 160, left: 32 },
+          width: 320,
+          height: 120,
           padding: 10,
           flexDirection: 'column',
           justifyContent: 'center',
         }}
-        uiBackground={{ color: Color4.create(0.05, 0.05, 0.05, 0.9) }}
+        uiBackground={{ color: Color4.create(0, 0, 0, 0.75) }}
       >
-        {/* Glow Left Accent */}
-        <UiEntity uiTransform={{ width: 4, height: '100%', positionType: 'absolute', position: { left: 0 } }} uiBackground={{ color: Color4.create(1, 0.2, 0.2, 1) }} />
-        
         <Label
-          value={`LAP`}
-          fontSize={16}
-          color={Color4.create(0.7, 0.7, 0.7, 1)}
-          textAlign="middle-center"
-          uiTransform={{ margin: { top: -10 } }}
+          value="🔍 DEBUG PHYSICS & COLLISION"
+          fontSize={12}
+          color={Color4.create(1, 0.4, 0.1, 1)}
+          uiTransform={{ width: '100%', height: 20 }}
         />
         <Label
-          value={`${RaceState.currentLap} / ${RaceState.maxLaps}`}
-          fontSize={36}
-          color={Color4.White()}
-          textAlign="middle-center"
-          uiTransform={{ margin: { top: -5 } }}
+          value={`Pos: X=${RaceState.kartPositionX.toFixed(2)} Y=${RaceState.kartPositionY.toFixed(2)} Z=${RaceState.kartPositionZ.toFixed(2)}`}
+          fontSize={10}
+          color={Color4.create(1, 1, 1, 0.9)}
+          uiTransform={{ width: '100%', height: 16 }}
+        />
+        <Label
+          value={`Wall Hit Mesh: ${RaceState.debugLastWallHitName}`}
+          fontSize={10}
+          color={Color4.create(1, 1, 1, 0.9)}
+          uiTransform={{ width: '100%', height: 16 }}
+        />
+        <Label
+          value={`Dist: ${RaceState.debugLastWallHitDist.toFixed(2)}m | HitY: ${RaceState.debugLastWallHitY.toFixed(2)}`}
+          fontSize={10}
+          color={Color4.create(1, 1, 1, 0.9)}
+          uiTransform={{ width: '100%', height: 16 }}
+        />
+        <Label
+          value={`NormalY: ${RaceState.debugLastWallHitNormalY.toFixed(3)} | IsWall: ${RaceState.debugLastWallHitIsWall ? 'YES ❌' : 'NO'}`}
+          fontSize={10}
+          color={Color4.create(1, 1, 1, 0.9)}
+          uiTransform={{ width: '100%', height: 16 }}
         />
       </UiEntity>
     )}
 
     {/* ── BOTTOM LEFT: CONTROLS ── */}
-    {RaceState.phase !== RacePhase.LOBBY && (
+    {RaceState.isOccupied && (
       <UiEntity
         uiTransform={{
           positionType: 'absolute',
@@ -177,7 +144,7 @@ const uiComponent = () => (
     )}
 
     {/* ── BOTTOM RIGHT: CUSTOM MINIMAP ── */}
-    {RaceState.phase !== RacePhase.LOBBY && (() => {
+    {RaceState.isOccupied && (() => {
       // ── Coordenadas mundiales de los bordes del track ──
       // La pista en el mundo va de X:470→709 y Z:67→403
       const TRACK_MIN_X = 470
@@ -242,4 +209,6 @@ const uiComponent = () => (
       )
     })()}
   </UiEntity>
-)
+  )
+}
+

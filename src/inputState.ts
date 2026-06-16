@@ -22,6 +22,7 @@ export type KartInputPayload = {
   exit:       boolean
   thrustUp:   boolean   // R — subir (modo nave)
   thrustDown: boolean   // F — bajar (modo nave)
+  turbo:      boolean   // Shift — activa turbo
   tick:       number
 }
 
@@ -34,5 +35,6 @@ export const InputState: KartInputPayload = {
   exit:       false,
   thrustUp:   false,
   thrustDown: false,
+  turbo:      false,
   tick:       0
 }

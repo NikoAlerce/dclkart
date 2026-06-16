@@ -39,9 +39,9 @@ export const DEFAULT_PHYSICS = {
 // 5 karts por fila, separados lateralmente.
 // 2 filas separadas hacia atrás.
 
-const BASE_X    = 366.3
+const BASE_X    = -193.7
 const BASE_Y    = 8.6
-const BASE_Z    = 316.2
+const BASE_Z    = -3.8
 const ROT_Y     = 50
 
 const LAT_DX    = -0.643   // left_x  = -cos(50°)
@@ -70,8 +70,8 @@ function kartPos(row: number, col: number): Vector3 {
 //
 // ┌─── EJEMPLO de kart personalizado ──────────────────────────────────────────┐
 // │  { id: 2, modelPath: 'assets/models/kart2.glb',                           │
-// │    spawnPos: kartPos(0, 1), spawnRotY: ROT_Y,                             │
-// │    scale: 1.5,            ← 1.5× el tamaño normal                        │
+// │    spawnPos: Vector3.create(27.3, 9.1, 1.5), spawnRotY: 0.0,                             │
+// │    ← 1.5× el tamaño normal                        │
 // │    maxSpeed: 18,          ← más lento (camión)                            │
 // │    acceleration: 10,      ← arranca despacio                              │
 // │    turnSpeed: 45,         ← gira más lento                                │
@@ -79,18 +79,18 @@ function kartPos(row: number, col: number): Vector3 {
 // └─────────────────────────────────────────────────────────────────────────────┘
 
 export const KART_CONFIGS: KartConfig[] = [
-  // ── Fila delantera (1-5) ──────────────────────────────────────────────────
-  { id: 1,  modelPath: 'assets/models/kart.glb',  spawnPos: kartPos(0, 0), spawnRotY: ROT_Y },
-  { id: 2,  modelPath: 'assets/models/kart2.glb', spawnPos: kartPos(0, 1), spawnRotY: ROT_Y, scale: 1.5 },
-  { id: 3,  modelPath: 'assets/models/kart3.glb', spawnPos: kartPos(0, 2), spawnRotY: ROT_Y, scale: 1.5,
+  // ── Fila delantera (1-5) Z = 321.5 ───────────────────────────────────────
+  { id: 1,  modelPath: 'assets/models/kart.glb',  spawnPos: Vector3.create(31.8, 10.1, -16.7), spawnRotY: 0.0},
+  { id: 2,  modelPath: 'assets/models/kart2.glb', spawnPos: Vector3.create(27.3, 9.1, 1.5), spawnRotY: 0.0},
+  { id: 3,  modelPath: 'assets/models/kart3.glb', spawnPos: Vector3.create(25.2, 8.4, 2.8), spawnRotY: 0.0,
     vehicleType: 'ship',
     maxSpeed: 48, acceleration: 28, friction: 0.55, turnSpeed: 95 },
-  { id: 4,  modelPath: 'assets/models/kart4.glb', spawnPos: kartPos(0, 3), spawnRotY: ROT_Y, scale: 1.5 },
-  { id: 5,  modelPath: 'assets/models/kart5.glb', spawnPos: kartPos(0, 4), spawnRotY: ROT_Y },
-  // ── Fila trasera (6-10) ───────────────────────────────────────────────────
-  { id: 6,  modelPath: 'assets/models/kart6.glb', spawnPos: kartPos(1, 0), spawnRotY: ROT_Y },
-  { id: 7,  modelPath: 'assets/models/kart7.glb', spawnPos: kartPos(1, 1), spawnRotY: ROT_Y },
-  { id: 8,  modelPath: 'assets/models/kart8.glb', spawnPos: kartPos(1, 2), spawnRotY: ROT_Y },
-  { id: 9,  modelPath: 'assets/models/kart9.glb', spawnPos: kartPos(1, 3), spawnRotY: ROT_Y },
-  { id: 10, modelPath: 'assets/models/kart10.glb',spawnPos: kartPos(1, 4), spawnRotY: ROT_Y },
+  { id: 4,  modelPath: 'assets/models/kart4.glb', spawnPos: Vector3.create(24.2, 8.7, 6.3), spawnRotY: 0.0},
+  { id: 5,  modelPath: 'assets/models/kart5.glb', spawnPos: Vector3.create(22.0, 8.5, 7.3), spawnRotY: 0.0},
+  // ── Fila trasera (6-10) Z = 318.5 ────────────────────────────────────────
+  { id: 6,  modelPath: 'assets/models/kart6.glb', spawnPos: Vector3.create(29.2, 10.7, -1.5), spawnRotY: 0.0},
+  { id: 7,  modelPath: 'assets/models/kart7.glb', spawnPos: Vector3.create(21.8, 8.6, 10.6), spawnRotY: 0.0},
+  { id: 8,  modelPath: 'assets/models/kart8.glb', spawnPos: Vector3.create(21.0, 8.7, 16.6), spawnRotY: 0.0},
+  { id: 9,  modelPath: 'assets/models/kart9.glb', spawnPos: Vector3.create(20.9, 8.8, 19.1), spawnRotY: 0.0},
+  { id: 10, modelPath: 'assets/models/kart10.glb',spawnPos: Vector3.create(-107.2, 10.2, -21.1), spawnRotY: 0.0},
 ]

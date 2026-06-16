@@ -27,6 +27,8 @@ export const KartData = engine.defineComponent('KartData', {
   modelEntity:        Schemas.Optional(Schemas.Entity),
   floorSensorEntity:  Schemas.Optional(Schemas.Entity),
   wallSensorEntity:   Schemas.Optional(Schemas.Entity),
+  wallSensorLeftEntity:  Schemas.Optional(Schemas.Entity),
+  wallSensorRightEntity: Schemas.Optional(Schemas.Entity),
   sparkEntity:        Schemas.Optional(Schemas.Entity),
   hideAreaEntity:     Schemas.Optional(Schemas.Entity),
   scale:              Schemas.Float,
@@ -39,4 +41,11 @@ export const KartData = engine.defineComponent('KartData', {
 // ownerId = address del jugador → kart ocupado por ese jugador
 export const KartOwner = engine.defineComponent('KartOwner', {
   ownerId: Schemas.String
+})
+
+// ─── TurboParticle: Partículas personalizadas de escape del turbo ────────────
+export const TurboParticle = engine.defineComponent('TurboParticle', {
+  velocity: Schemas.Vector3,
+  lifeTime: Schemas.Float,
+  maxLife:  Schemas.Float
 })

@@ -22,3 +22,13 @@ src
 cursor.config
 cursorignore
 .github
+HANDOFF_DEV
+scratch
+temp
+assets/models/trees.glb
+scene_backup.json
+glb-editor.html
+glb-inspector.html
+glb-editor-server.js
+glb_nodes.txt
+kartSystem_history.txt

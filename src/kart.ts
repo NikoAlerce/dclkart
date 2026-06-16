@@ -18,13 +18,14 @@ import { DEFAULT_PHYSICS, KART_CONFIGS } from './kartConfig'
 // ─── Estacionamiento del avatar ───────────────────────────────────────────────
 // El avatar se teletransporta aquí al subirse. Alto (Y=100) para que
 // el collider del avatar no interfiera con la pista.
-const PARKING_SPOT = Vector3.create(472, 100, 248)
+const PARKING_SPOT = Vector3.create(-88, 100, -72)
 
 // ─── Mapas globales ───────────────────────────────────────────────────────────
 // entity → enumId de red
 export const kartEntityToId  = new Map<number, number>()
 // entity → entidad hija que tiene el MeshCollider (para delete/restore)
 export const kartColliderMap = new Map<number, number>()
+export const spawnedModelEntities = new Set<number>()
 
 export function createKart(config: KartConfig): number {
   const kartEntity = engine.addEntity()
@@ -32,7 +33,7 @@ export function createKart(config: KartConfig): number {
   // ── Entidad padre: física y movimiento ──────────────────────────────────
   Transform.create(kartEntity, {
     position: config.spawnPos,
-    rotation: Quaternion.fromEulerDegrees(0, config.spawnRotY, 0),
+    rotation: Quaternion.fromEulerDegrees(0, config.spawnRotY + 90, 0),
     scale:    Vector3.create(1, 1, 1)
   })
 
@@ -40,6 +41,7 @@ export function createKart(config: KartConfig): number {
 
   // ── Modelo visual (hijo con corrección de orientación) ──────────────────
   const kartModel = engine.addEntity()
+  spawnedModelEntities.add(kartModel)
   GltfContainer.create(kartModel, {
     src: config.modelPath,
     invisibleMeshesCollisionMask: ColliderLayer.CL_NONE,
@@ -47,9 +49,9 @@ export function createKart(config: KartConfig): number {
   })
   Transform.create(kartModel, {
     parent:   kartEntity,
-    position: Vector3.create(0, 0.4 * scaleMult, 0),
+    position: Vector3.Zero(),
     rotation: Quaternion.fromEulerDegrees(0, -90, 0),
-    scale:    Vector3.create(1.25 * scaleMult, 1.25 * scaleMult, 1.25 * scaleMult)
+    scale:    Vector3.create(scaleMult, scaleMult, scaleMult)
   })
 
   // ── Caja de colisión con tamaño real del kart ───────────────────────────
@@ -80,7 +82,7 @@ export function createKart(config: KartConfig): number {
     lastSafeX:    config.spawnPos.x,
     lastSafeY:    config.spawnPos.y,
     lastSafeZ:    config.spawnPos.z,
-    lastSafeRotY: config.spawnRotY,
+    lastSafeRotY: config.spawnRotY + 90,
     modelEntity:  kartModel,
     scale:        scaleMult,
     vehicleType:  config.vehicleType ?? 'kart',
@@ -120,7 +122,7 @@ export function createKart(config: KartConfig): number {
       const myId = myProfile?.userId ?? 'local'
       ownership.ownerId   = myId
       kartData.isOccupied = true
-      RaceState.startCountdown()
+      RaceState.isOccupied = true
 
       const kartTransform = Transform.get(kartEntity)
 
@@ -168,21 +170,25 @@ export function createKart(config: KartConfig): number {
       kartData.cameraPivotEntity = cameraPivot
 
       // ── PASO 3a: Sensor de PISO ───────────────────────────────────────────
+      // Colocamos el sensor a 1.5 * scaleMult de altura y adelantado (0.5 * scaleMult).
+      // Al estar elevado pero apuntando hacia abajo, tolera que el kart se hunda temporalmente en bajadas/rampas,
+      // pero por su ángulo y máscara de normales en kartSystem.ts no colisionará con la parte inferior de puentes.
       const floorSensor = engine.addEntity()
       Transform.create(floorSensor, {
         parent:   kartEntity,
-        position: Vector3.create(0, 4.0 * scaleMult, 0)
+        position: Vector3.create(0, 1.5 * scaleMult, 0.5 * scaleMult)
       })
       Raycast.createOrReplace(floorSensor, {
         direction:     { $case: 'globalDirection', globalDirection: Vector3.create(0, -1, 0) },
-        maxDistance:   20.0 * scaleMult,
+        maxDistance:   12.0 * scaleMult,
         queryType:     RaycastQueryType.RQT_QUERY_ALL,
         continuous:    true,
         collisionMask: ColliderLayer.CL_PHYSICS
       })
       kartData.floorSensorEntity = floorSensor
 
-      // ── PASO 3b: Sensor de PARED (y choque con otros karts) ──────────────
+      // ── PASO 3b: Sensor de PARED (Triple: Centro, Izquierda y Derecha para detectar árboles y postes angostos) ──
+      // Centro
       const wallSensor = engine.addEntity()
       Transform.create(wallSensor, {
         parent:   kartEntity,
@@ -190,12 +196,42 @@ export function createKart(config: KartConfig): number {
       })
       Raycast.createOrReplace(wallSensor, {
         direction:     { $case: 'localDirection', localDirection: Vector3.create(0, 0, 1) },
-        maxDistance:   2.5 * scaleMult,
+        maxDistance:   1.2 * scaleMult,
         queryType:     RaycastQueryType.RQT_QUERY_ALL,
         continuous:    true,
-        collisionMask: ColliderLayer.CL_PHYSICS   // detecta paredes Y otros karts
+        collisionMask: ColliderLayer.CL_PHYSICS
       })
       kartData.wallSensorEntity = wallSensor
+
+      // Izquierda
+      const wallSensorLeft = engine.addEntity()
+      Transform.create(wallSensorLeft, {
+        parent:   kartEntity,
+        position: Vector3.create(-0.5 * scaleMult, 0.5 * scaleMult, 1.0 * scaleMult)
+      })
+      Raycast.createOrReplace(wallSensorLeft, {
+        direction:     { $case: 'localDirection', localDirection: Vector3.create(0, 0, 1) },
+        maxDistance:   1.2 * scaleMult,
+        queryType:     RaycastQueryType.RQT_QUERY_ALL,
+        continuous:    true,
+        collisionMask: ColliderLayer.CL_PHYSICS
+      })
+      kartData.wallSensorLeftEntity = wallSensorLeft
+
+      // Derecha
+      const wallSensorRight = engine.addEntity()
+      Transform.create(wallSensorRight, {
+        parent:   kartEntity,
+        position: Vector3.create(0.5 * scaleMult, 0.5 * scaleMult, 1.0 * scaleMult)
+      })
+      Raycast.createOrReplace(wallSensorRight, {
+        direction:     { $case: 'localDirection', localDirection: Vector3.create(0, 0, 1) },
+        maxDistance:   1.2 * scaleMult,
+        queryType:     RaycastQueryType.RQT_QUERY_ALL,
+        continuous:    true,
+        collisionMask: ColliderLayer.CL_PHYSICS
+      })
+      kartData.wallSensorRightEntity = wallSensorRight
 
       // ── PASO 4: Chispas de drift ─────────────────────────────────────────
       const sparkEntity = engine.addEntity()
@@ -237,58 +273,37 @@ export function createKart(config: KartConfig): number {
 
 // ─── Escáner Automático para Creator Hub ─────────────────────────────────────
 export function scanAndConvertKarts() {
-  let foundCount = 0
-  let autoId = 100 // IDs para los karts escaneados
-
-  // Usamos un sistema que corre UNA SOLA VEZ en el primer frame
-  // Esto asegura que Decentraland ya cargó todo lo del Creator Hub en memoria.
-  function scanSystem() {
-    for (const [entity, gltf, transform] of engine.getEntitiesWith(GltfContainer, Transform)) {
-      const src = gltf.src.toLowerCase()
-      
-      // Si el modelo es un kart o una nave
-      if (src.includes('kart') || src.includes('nave')) {
-        foundCount++
-        
-        // Extraemos los datos visuales que pusiste en el Creator Hub
-        const pos = transform.position
-        // Convertimos el cuaternión a grados Y (yaw)
-        const euler = Quaternion.toEulerAngles(transform.rotation)
-        const scaleMult = transform.scale.x
-
-        // Determinamos el tipo
-        const vType = src.includes('nave') ? 'ship' : 'kart'
-
-        console.log(`[SCANNER] ¡Vehículo detectado en el Creator Hub! Tipo: ${vType}, Modelo: ${src}, Pos: ${pos.x},${pos.y},${pos.z}`)
-
-        // Usamos nuestra fábrica de físicas para crear el auto "vivo" en ese mismo lugar
-        createKart({
-          id: autoId++,
-          spawnPos: Vector3.create(pos.x, pos.y, pos.z),
-          spawnRotY: euler.y,
-          scale: scaleMult,
-          modelPath: gltf.src,
-          vehicleType: vType as 'kart' | 'ship'
-        })
-        
-        // Borramos la entidad visual estática original para que no haya duplicados
-        engine.removeEntity(entity)
-      }
-    }
-
-    // Si el escáner no encontró NADA en el Creator Hub (ej: recién clonás el proyecto y no abriste el Hub)
-    // spawneamos la grilla clásica por defecto para que el juego siga funcionando.
-    if (foundCount === 0) {
-      console.log(`[SCANNER] No se encontraron karts en el Creator Hub. Spawneando karts por defecto...`)
-      for (const config of KART_CONFIGS) {
-        createKart(config)
-      }
-    }
-
-    // El sistema se auto-destruye después de correr 1 vez
-    engine.removeSystem(scanSystem)
+  // 1. Spawneamos siempre los karts desde KART_CONFIGS (con las posiciones exactas del editor)
+  console.log(`[SCANNER] Spawneando karts desde KART_CONFIGS...`)
+  for (const config of KART_CONFIGS) {
+    createKart(config)
   }
 
-  // Agregamos el sistema
-  engine.addSystem(scanSystem)
+  // 2. Buscamos y eliminamos cualquier entidad estática duplicada cargada desde el Creator Hub (main.crdt)
+  function cleanupCreatorHubKarts() {
+    let deletedCount = 0
+    for (const [entity, gltf] of engine.getEntitiesWith(GltfContainer)) {
+      const src = gltf.src.toLowerCase()
+      if (
+        src.includes('kart') ||
+        src.includes('nave') ||
+        src.includes('track.glb') ||
+        src.includes('flowerman.glb') ||
+        src.includes('arboles.glb') ||
+        src.includes('trees.glb')
+      ) {
+        if (!spawnedModelEntities.has(entity)) {
+          engine.removeEntity(entity)
+          deletedCount++
+        }
+      }
+    }
+    if (deletedCount > 0) {
+      console.log(`[SCANNER] Se eliminaron ${deletedCount} entidades estáticas duplicadas del Creator Hub (main.crdt).`)
+    }
+    engine.removeSystem(cleanupCreatorHubKarts)
+  }
+
+  // Agregamos el sistema para que limpie en el primer frame
+  engine.addSystem(cleanupCreatorHubKarts)
 }

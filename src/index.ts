@@ -1,28 +1,173 @@
-import { engine, Transform, GltfContainer, ColliderLayer } from '@dcl/sdk/ecs'
-import { Vector3 } from '@dcl/sdk/math'
-import { kartMovementSystem } from './kartSystem'
-import { scanAndConvertKarts } from './kart'
+import { engine, Transform, GltfContainer, ColliderLayer, MeshCollider, LightSource, MeshRenderer, Material } from '@dcl/sdk/ecs'
+import { Vector3, Color3, Color4, Quaternion } from '@dcl/sdk/math'
+import { movePlayerTo } from '~system/RestrictedActions'
+import { kartMovementSystem, turboParticleSystem } from './kartSystem'
+import { scanAndConvertKarts, spawnedModelEntities } from './kart'
 import { setupUi } from './ui'
+import { RaceState } from './raceState'
+import { setupWindParticles } from './windParticles'
+import { SPAWN_POSITION, SPAWN_PLATFORM, SPAWN_CAMERA_TARGET } from './spawnConfig'
+
 
 export function main() {
-  // 1. Instanciar la Pista de Carreras GLB
+  // 1. Instanciar la Pista de Carreras GLB (Parte 1: Track)
   const trackEntity = engine.addEntity()
+  spawnedModelEntities.add(trackEntity)
   GltfContainer.create(trackEntity, {
     src: 'assets/models/track.glb',
     invisibleMeshesCollisionMask: ColliderLayer.CL_PHYSICS,
     visibleMeshesCollisionMask:   ColliderLayer.CL_PHYSICS
   })
   Transform.create(trackEntity, {
-    position: Vector3.create(472, 10.0, 248),
+    position: Vector3.create(-88, 10, -72),
+    rotation: Quaternion.create(0.0000, 0.0000, 0.0000, 1.0000),
+    scale: Vector3.create(1.000, 1.000, 1.000)
+  })
+
+  // Guardar coordenadas en RaceState para la UI
+  RaceState.trackX = -88
+  RaceState.trackY = 10
+  RaceState.trackZ = -72
+
+  // Actualizar dinámicamente las coordenadas registradas de la pista desde su Transform
+  engine.addSystem(() => {
+    if (Transform.has(trackEntity)) {
+      const pos = Transform.get(trackEntity).position
+      RaceState.trackX = pos.x
+      RaceState.trackY = pos.y
+      RaceState.trackZ = pos.z
+    }
+  })
+
+  // 1.5 Instanciar la Pista de Carreras GLB (Parte 2: Flowerman)
+  const flowermanEntity = engine.addEntity()
+  spawnedModelEntities.add(flowermanEntity)
+  GltfContainer.create(flowermanEntity, {
+    src: 'assets/models/flowerman.glb',
+    invisibleMeshesCollisionMask: ColliderLayer.CL_PHYSICS,
+    visibleMeshesCollisionMask:   ColliderLayer.CL_PHYSICS
+  })
+  Transform.create(flowermanEntity, {
+    position: Vector3.create(-88, 10, -72),
     scale:    Vector3.create(1, 1, 1)
   })
+
+  // 1.6 Instanciar la Pista de Carreras GLB (Parte 3: Arboles)
+  const arbolesEntity = engine.addEntity()
+  spawnedModelEntities.add(arbolesEntity)
+  GltfContainer.create(arbolesEntity, {
+    src: 'assets/models/arboles.glb',
+    invisibleMeshesCollisionMask: ColliderLayer.CL_PHYSICS,
+    visibleMeshesCollisionMask:   ColliderLayer.CL_PHYSICS
+  })
+  Transform.create(arbolesEntity, {
+    position: Vector3.create(-88, 10, -72),
+    scale:    Vector3.create(1, 1, 1)
+  })
+
+  // 1.8 Plataforma física invisible en la zona de Spawn
+  // Evita que el jugador caiga al vacío (y=0) mientras el modelo GLB de la pista (5.8MB) se descarga y parsea.
+  const spawnPlatform = engine.addEntity()
+  Transform.create(spawnPlatform, {
+    position: SPAWN_PLATFORM,
+    scale:    Vector3.create(20, 0.1, 20)
+  })
+  MeshCollider.setBox(spawnPlatform)
+
+  // 1.9 Sistema de Spawn Inicial Seguro
+  // Teletransporta al jugador a la posición de spawn elegida en el editor al iniciar la escena.
+  // Realiza múltiples intentos espaciados en el tiempo para asegurar el éxito,
+  // superando cualquier retraso de carga o anulación por parte del cliente de Decentraland.
+  let spawnAttempts = 0
+  let timeSinceLastSpawnAttempt = 0
+  engine.addSystem((dt) => {
+    if (spawnAttempts >= 5) return // Dejar de intentar después de 5 veces
+    if (!Transform.has(engine.PlayerEntity)) return
+
+    timeSinceLastSpawnAttempt += dt
+    const playerTransform = Transform.get(engine.PlayerEntity)
+    const distToSpawn = Vector3.distance(playerTransform.position, SPAWN_POSITION)
+
+    // Si el jugador ya está cerca del punto de spawn (menos de 5 metros), el spawn fue exitoso
+    if (distToSpawn < 5.0) {
+      spawnAttempts = 5
+      console.log(`[SPAWN] Jugador posicionado correctamente en el spawn point.`)
+      return
+    }
+
+    if (timeSinceLastSpawnAttempt >= 1.0 || spawnAttempts === 0) {
+      timeSinceLastSpawnAttempt = 0
+      spawnAttempts++
+      console.log(`[SPAWN] Intento ${spawnAttempts}/5 de posicionar al jugador en el spawn point: ${SPAWN_POSITION.x}, ${SPAWN_POSITION.y}, ${SPAWN_POSITION.z}`)
+      movePlayerTo({
+        newRelativePosition: Vector3.create(SPAWN_POSITION.x, SPAWN_POSITION.y + 0.1, SPAWN_POSITION.z),
+        cameraTarget: SPAWN_CAMERA_TARGET
+      }).catch((err) => {
+        console.error(`[SPAWN] Error en el teletransporte inicial:`, err)
+      })
+    }
+  })
+
 
   // 2. Escanear el mapa y convertir los autos/naves del Creator Hub en vehículos funcionales
   scanAndConvertKarts()
 
-  // 3. Registrar el sistema de movimiento del kart
+  // 3. Registrar los sistemas de física
   engine.addSystem(kartMovementSystem)
+  engine.addSystem(turboParticleSystem)
+
+  // 3.5 Sistema de rescate si el jugador se cae al vacío a pie
+  let lastTeleportTime = 0
+  engine.addSystem(() => {
+    if (RaceState.isOccupied) return
+    if (!Transform.has(engine.PlayerEntity)) return
+    const playerTransform = Transform.get(engine.PlayerEntity)
+    if (playerTransform.position.y < 3.0) {
+      const now = Date.now()
+      if (now - lastTeleportTime > 3000) {
+        lastTeleportTime = now
+        console.log(`[RESPAWN] Jugador detectado fuera de la pista a pie (Y < 3.0). Teletransportando a largada...`)
+        movePlayerTo({
+          newRelativePosition: Vector3.create(SPAWN_POSITION.x, SPAWN_POSITION.y + 0.1, SPAWN_POSITION.z),
+          cameraTarget: SPAWN_CAMERA_TARGET
+        }).catch(() => {})
+      }
+    }
+  })
 
   // 4. Registrar UI
   setupUi()
+
+  // 5. Inicializar partículas mágicas flotantes alrededor del jugador
+  setupWindParticles()
+
+  // 6. Diagnóstico de coordenadas en consola
+  let diagTime = 0
+  engine.addSystem((dt) => {
+    if (diagTime < 0) return
+    diagTime += dt
+    if (diagTime > 5) {
+      diagTime = -1 // Solo ejecutar una vez
+      
+      const startMsg = "--- INICIO DE DIAGNOSTICO DE GLTFs EN LA ESCENA ---"
+      console.log(`[DIAGNOSTICO] ${startMsg}`)
+      fetch(`http://localhost:9000/api/diagnostics?log=${encodeURIComponent(startMsg)}`).catch(() => {})
+
+      const pPos = Transform.has(engine.PlayerEntity) ? Transform.get(engine.PlayerEntity).position : undefined
+      const pMsg = `Jugador parado en: X=${pPos?.x.toFixed(2)}, Y=${pPos?.y.toFixed(2)}, Z=${pPos?.z.toFixed(2)}`
+      console.log(`[DIAGNOSTICO] ${pMsg}`)
+      fetch(`http://localhost:9000/api/diagnostics?log=${encodeURIComponent(pMsg)}`).catch(() => {})
+
+      for (const [entity, gltf] of engine.getEntitiesWith(GltfContainer)) {
+        const pos = Transform.has(entity) ? Transform.get(entity).position : undefined
+        const msg = `Entity=${entity} GLTF=${gltf.src} Posicion=${pos ? `X=${pos.x.toFixed(2)}, Y=${pos.y.toFixed(2)}, Z=${pos.z.toFixed(2)}` : 'N/A'}`
+        console.log(`[DIAGNOSTICO] ${msg}`)
+        fetch(`http://localhost:9000/api/diagnostics?log=${encodeURIComponent(msg)}`).catch(() => {})
+      }
+
+      const endMsg = "--- FIN DE DIAGNOSTICO ---"
+      console.log(`[DIAGNOSTICO] ${endMsg}`)
+      fetch(`http://localhost:9000/api/diagnostics?log=${encodeURIComponent(endMsg)}`).catch(() => {})
+    }
+  })
 }

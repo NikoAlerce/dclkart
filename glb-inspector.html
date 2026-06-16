@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>GLB Inspector — Decentraland Tool</title>
+<meta name="description" content="Herramienta para visualizar y localizar modelos GLB antes de subirlos a Decentraland">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: #0a0a0f;
+    color: #e0e0f0;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  #canvas-container {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+  }
+
+  canvas { display: block; width: 100% !important; height: 100% !important; }
+
+  /* ── DROP OVERLAY ── */
+  #drop-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(10,10,20,0.92);
+    backdrop-filter: blur(12px);
+    transition: opacity .3s;
+  }
+  #drop-overlay.hidden { opacity: 0; pointer-events: none; }
+  #drop-overlay .icon { font-size: 72px; margin-bottom: 20px; animation: float 3s ease-in-out infinite; }
+  #drop-overlay h1 { font-size: 2.2rem; font-weight: 700; background: linear-gradient(135deg,#7c3aed,#06b6d4); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  #drop-overlay p { margin-top: 10px; color: #888; font-size: 1rem; }
+  #drop-overlay .btn-load {
+    margin-top: 28px;
+    padding: 12px 32px;
+    border-radius: 12px;
+    border: none;
+    background: linear-gradient(135deg,#7c3aed,#06b6d4);
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform .15s, box-shadow .15s;
+    box-shadow: 0 0 30px rgba(124,58,237,.4);
+  }
+  #drop-overlay .btn-load:hover { transform: scale(1.05); box-shadow: 0 0 40px rgba(124,58,237,.7); }
+  #file-input { display: none; }
+  #drop-overlay.drag-active { border: 3px dashed #7c3aed; background: rgba(124,58,237,.08); }
+  @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-12px)} }
+
+  /* ── SIDEBAR ── */
+  #sidebar {
+    position: fixed;
+    right: 0; top: 0; bottom: 0;
+    width: 340px;
+    background: rgba(15,15,25,0.88);
+    backdrop-filter: blur(20px);
+    border-left: 1px solid rgba(124,58,237,.25);
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    transform: translateX(0);
+    transition: transform .3s;
+    overflow: hidden;
+  }
+  #sidebar.collapsed { transform: translateX(320px); }
+
+  #sidebar-header {
+    padding: 18px 20px;
+    border-bottom: 1px solid rgba(124,58,237,.2);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  #sidebar-header h2 { font-size: 1rem; font-weight: 600; color: #7c3aed; }
+
+  #model-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  #model-list::-webkit-scrollbar { width: 4px; }
+  #model-list::-webkit-scrollbar-thumb { background: #7c3aed55; border-radius: 4px; }
+
+  .model-card {
+    background: rgba(124,58,237,.07);
+    border: 1px solid rgba(124,58,237,.2);
+    border-radius: 12px;
+    padding: 14px;
+    transition: border-color .2s;
+    cursor: pointer;
+  }
+  .model-card:hover { border-color: #7c3aed; }
+  .model-card.active { border-color: #06b6d4; background: rgba(6,182,212,.07); }
+
+  .model-card .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .model-card .card-name { font-weight: 600; font-size: .92rem; color: #e0e0ff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
+  .model-card .badge { font-size: .7rem; padding: 2px 8px; border-radius: 20px; background: rgba(124,58,237,.3); color: #c4b5fd; }
+
+  .info-row { display: flex; justify-content: space-between; font-size: .78rem; margin-bottom: 4px; }
+  .info-row .label { color: #888; }
+  .info-row .value { color: #c4b5fd; font-weight: 600; font-family: monospace; }
+
+  .separator { height: 1px; background: rgba(255,255,255,.05); margin: 8px 0; }
+
+  .offset-controls { margin-top: 8px; }
+  .offset-controls label { font-size: .75rem; color: #888; display: block; margin-bottom: 4px; }
+  .offset-row { display: flex; gap: 6px; margin-bottom: 6px; }
+  .offset-row input {
+    flex: 1;
+    background: rgba(255,255,255,.06);
+    border: 1px solid rgba(124,58,237,.25);
+    border-radius: 6px;
+    padding: 5px 8px;
+    color: #e0e0ff;
+    font-size: .8rem;
+    width: 100%;
+    outline: none;
+    transition: border-color .2s;
+  }
+  .offset-row input:focus { border-color: #7c3aed; }
+  .offset-row input::placeholder { color: #555; }
+
+  .btn-apply {
+    width: 100%;
+    padding: 7px;
+    border-radius: 8px;
+    border: none;
+    background: linear-gradient(135deg,#7c3aed,#06b6d4);
+    color: #fff;
+    font-size: .82rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 4px;
+    transition: opacity .2s;
+  }
+  .btn-apply:hover { opacity: .85; }
+
+  .btn-remove {
+    width: 100%;
+    padding: 6px;
+    border-radius: 8px;
+    border: 1px solid rgba(239,68,68,.4);
+    background: transparent;
+    color: #f87171;
+    font-size: .78rem;
+    cursor: pointer;
+    margin-top: 6px;
+    transition: background .2s;
+  }
+  .btn-remove:hover { background: rgba(239,68,68,.15); }
+
+  /* ── BOTTOM TOOLBAR ── */
+  #toolbar {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+    background: rgba(15,15,25,.88);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(124,58,237,.3);
+    border-radius: 16px;
+    padding: 10px 16px;
+    z-index: 50;
+  }
+
+  .tb-btn {
+    padding: 7px 16px;
+    border-radius: 10px;
+    border: 1px solid rgba(124,58,237,.3);
+    background: rgba(124,58,237,.1);
+    color: #c4b5fd;
+    font-size: .82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .2s;
+    white-space: nowrap;
+  }
+  .tb-btn:hover { background: rgba(124,58,237,.25); border-color: #7c3aed; color: #fff; }
+  .tb-btn.active { background: linear-gradient(135deg,#7c3aed,#06b6d4); border-color: transparent; color: #fff; }
+
+  /* ── HUD COORDS ── */
+  #hud {
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    background: rgba(15,15,25,.8);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(124,58,237,.2);
+    border-radius: 12px;
+    padding: 10px 16px;
+    font-size: .78rem;
+    color: #888;
+    z-index: 50;
+    min-width: 200px;
+  }
+  #hud .hud-row { display: flex; justify-content: space-between; gap: 16px; }
+  #hud .hud-val { color: #06b6d4; font-family: monospace; font-weight: 600; }
+
+  /* ── LOADING ── */
+  #loading {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%,-50%);
+    background: rgba(15,15,25,.95);
+    border: 1px solid rgba(124,58,237,.3);
+    border-radius: 16px;
+    padding: 28px 40px;
+    text-align: center;
+    z-index: 200;
+    display: none;
+  }
+  #loading .spinner {
+    width: 40px; height: 40px;
+    border: 3px solid rgba(124,58,237,.2);
+    border-top-color: #7c3aed;
+    border-radius: 50%;
+    margin: 0 auto 14px;
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #toggle-sidebar {
+    position: fixed;
+    right: 346px;
+    top: 16px;
+    z-index: 51;
+    background: rgba(124,58,237,.8);
+    border: none;
+    color: #fff;
+    border-radius: 8px 0 0 8px;
+    padding: 8px 6px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background .2s;
+  }
+  #toggle-sidebar:hover { background: #7c3aed; }
+  #toggle-sidebar.collapsed { right: 26px; border-radius: 8px; }
+
+  #add-more-btn {
+    padding: 12px;
+    border-radius: 10px;
+    border: 2px dashed rgba(124,58,237,.3);
+    background: transparent;
+    color: #7c3aed;
+    font-size: .85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .2s;
+    flex-shrink: 0;
+    margin: 0 12px 12px;
+  }
+  #add-more-btn:hover { border-color: #7c3aed; background: rgba(124,58,237,.1); }
+
+  #file-input-more { display: none; }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: #555;
+    font-size: .85rem;
+  }
+  .empty-state .icon { font-size: 2.5rem; display: block; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+
+<!-- Drop Overlay -->
+<div id="drop-overlay">
+  <div class="icon">🧊</div>
+  <h1>GLB Inspector</h1>
+  <p>Arrastrá uno o varios archivos .glb para inspeccionar</p>
+  <button class="btn-load" onclick="document.getElementById('file-input').click()">📂 Abrir archivos GLB</button>
+  <input type="file" id="file-input" accept=".glb" multiple>
+</div>
+
+<!-- Loading -->
+<div id="loading">
+  <div class="spinner"></div>
+  <div style="color:#c4b5fd;font-weight:600">Cargando modelo...</div>
+</div>
+
+<!-- Canvas -->
+<div id="canvas-container"></div>
+
+<!-- HUD -->
+<div id="hud">
+  <div class="hud-row">
+    <span>Cámara:</span>
+    <span class="hud-val" id="hud-cam">-</span>
+  </div>
+  <div class="hud-row" style="margin-top:4px">
+    <span>Modelos:</span>
+    <span class="hud-val" id="hud-count">0</span>
+  </div>
+</div>
+
+<!-- Toggle Sidebar -->
+<button id="toggle-sidebar" onclick="toggleSidebar()" title="Abrir/Cerrar panel">◀</button>
+
+<!-- Sidebar -->
+<div id="sidebar">
+  <div id="sidebar-header">
+    <h2>🔍 Modelos cargados</h2>
+    <span id="model-count-badge" style="font-size:.75rem;color:#888">0 modelos</span>
+  </div>
+  <div id="model-list">
+    <div class="empty-state">
+      <span class="icon">📦</span>
+      Arrastrá archivos GLB aquí<br>o usá el botón de abrir
+    </div>
+  </div>
+  <button id="add-more-btn" onclick="document.getElementById('file-input-more').click()">+ Agregar más GLBs</button>
+  <input type="file" id="file-input-more" accept=".glb" multiple>
+</div>
+
+<!-- Bottom Toolbar -->
+<div id="toolbar">
+  <button class="tb-btn" onclick="resetCamera()">🎯 Centrar cámara</button>
+  <button class="tb-btn" onclick="toggleGrid()">⊞ Grid</button>
+  <button class="tb-btn" onclick="toggleAxes()">✚ Ejes</button>
+  <button class="tb-btn" onclick="toggleBBoxes()">□ Bounds</button>
+  <button class="tb-btn" onclick="toggleWireframe()">⬡ Wireframe</button>
+</div>
+
+<!-- Three.js + GLTFLoader -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+
+<script>
+// ════════════════════════════════════════════
+//  SCENE SETUP
+// ════════════════════════════════════════════
+const container = document.getElementById('canvas-container')
+const renderer  = new THREE.WebGLRenderer({ antialias: true })
+renderer.setPixelRatio(window.devicePixelRatio)
+renderer.setSize(window.innerWidth, window.innerHeight)
+renderer.outputEncoding  = THREE.sRGBEncoding
+renderer.toneMapping     = THREE.ACESFilmicToneMapping
+renderer.toneMappingExposure = 1.2
+renderer.shadowMap.enabled = true
+container.appendChild(renderer.domElement)
+
+const scene  = new THREE.Scene()
+scene.background = new THREE.Color(0x0a0a0f)
+scene.fog        = new THREE.Fog(0x0a0a0f, 400, 2000)
+
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 10000)
+camera.position.set(0, 80, 200)
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement)
+controls.enableDamping = true
+controls.dampingFactor = 0.07
+controls.maxPolarAngle = Math.PI / 1.8
+
+// Lights
+const ambient = new THREE.AmbientLight(0xffffff, 0.6)
+scene.add(ambient)
+
+const sun = new THREE.DirectionalLight(0xfff5e0, 1.4)
+sun.position.set(200, 400, 100)
+sun.castShadow = true
+sun.shadow.mapSize.set(2048, 2048)
+sun.shadow.camera.near = 1
+sun.shadow.camera.far  = 2000
+sun.shadow.camera.left = sun.shadow.camera.bottom = -500
+sun.shadow.camera.right = sun.shadow.camera.top = 500
+scene.add(sun)
+
+const fill = new THREE.DirectionalLight(0xc0d8ff, 0.4)
+fill.position.set(-100, 50, -200)
+scene.add(fill)
+
+// Grid
+const grid = new THREE.GridHelper(2000, 80, 0x333366, 0x1a1a2e)
+grid.visible = true
+scene.add(grid)
+
+// Axes
+const axes = new THREE.AxesHelper(100)
+axes.visible = true
+scene.add(axes)
+
+// ════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════
+let models       = []     // { name, root, bbox, bboxHelper, size, center, offset:{x,y,z} }
+let showBBoxes   = true
+let showWireframe= false
+let sidebarOpen  = true
+
+// ════════════════════════════════════════════
+//  GLB LOADER
+// ════════════════════════════════════════════
+const loader = new THREE.GLTFLoader()
+
+function loadGLB(file) {
+  document.getElementById('loading').style.display = 'block'
+
+  const url    = URL.createObjectURL(file)
+  const nameClean = file.name.replace(/\.glb$/i,'')
+
+  loader.load(url, (gltf) => {
+    URL.revokeObjectURL(url)
+    document.getElementById('loading').style.display = 'none'
+    document.getElementById('drop-overlay').classList.add('hidden')
+
+    const root = gltf.scene
+    root.traverse(n => {
+      if (n.isMesh) {
+        n.receiveShadow = true
+        n.castShadow    = true
+      }
+    })
+    scene.add(root)
+
+    // Bounding box
+    const bbox   = new THREE.Box3().setFromObject(root)
+    const size   = new THREE.Vector3()
+    const center = new THREE.Vector3()
+    bbox.getSize(size)
+    bbox.getCenter(center)
+
+    // Visual bbox helper
+    const bboxHelper = new THREE.Box3Helper(bbox, new THREE.Color(0x7c3aed))
+    bboxHelper.visible = showBBoxes
+    scene.add(bboxHelper)
+
+    const entry = { name: nameClean, file: file.name, root, bbox, bboxHelper, size, center, offset: {x:0,y:0,z:0} }
+    models.push(entry)
+
+    updateSidebar()
+    if (models.length === 1) focusAll()
+    document.getElementById('hud-count').textContent = models.length
+
+  }, undefined, (err) => {
+    document.getElementById('loading').style.display = 'none'
+    alert('Error cargando ' + file.name + ': ' + err.message)
+  })
+}
+
+// ════════════════════════════════════════════
+//  SIDEBAR
+// ════════════════════════════════════════════
+function updateSidebar() {
+  const list = document.getElementById('model-list')
+  document.getElementById('model-count-badge').textContent = models.length + ' modelo' + (models.length !== 1 ? 's' : '')
+
+  if (models.length === 0) {
+    list.innerHTML = '<div class="empty-state"><span class="icon">📦</span>Arrastrá archivos GLB aquí</div>'
+    return
+  }
+
+  list.innerHTML = ''
+  models.forEach((m, idx) => {
+    const card = document.createElement('div')
+    card.className = 'model-card'
+    card.id = 'card-' + idx
+
+    const minStr = `${m.bbox.min.x.toFixed(1)}, ${m.bbox.min.y.toFixed(1)}, ${m.bbox.min.z.toFixed(1)}`
+    const maxStr = `${m.bbox.max.x.toFixed(1)}, ${m.bbox.max.y.toFixed(1)}, ${m.bbox.max.z.toFixed(1)}`
+    const sizeStr = `${m.size.x.toFixed(1)} × ${m.size.y.toFixed(1)} × ${m.size.z.toFixed(1)}`
+    const cStr = `${m.center.x.toFixed(1)}, ${m.center.y.toFixed(1)}, ${m.center.z.toFixed(1)}`
+
+    card.innerHTML = `
+      <div class="card-header">
+        <span class="card-name" title="${m.file}">${m.name}</span>
+        <span class="badge">#${idx+1}</span>
+      </div>
+      <div class="info-row"><span class="label">Centro</span><span class="value">${cStr}</span></div>
+      <div class="info-row"><span class="label">Tamaño</span><span class="value">${sizeStr}</span></div>
+      <div class="info-row"><span class="label">BBox min</span><span class="value">${minStr}</span></div>
+      <div class="info-row"><span class="label">BBox max</span><span class="value">${maxStr}</span></div>
+      <div class="separator"></div>
+      <div class="offset-controls">
+        <label>📐 Mover posición (X / Y / Z)</label>
+        <div class="offset-row">
+          <input type="number" id="ox-${idx}" placeholder="X" value="${m.offset.x}" step="1">
+          <input type="number" id="oy-${idx}" placeholder="Y" value="${m.offset.y}" step="1">
+          <input type="number" id="oz-${idx}" placeholder="Z" value="${m.offset.z}" step="1">
+        </div>
+        <button class="btn-apply" onclick="applyOffset(${idx})">✓ Aplicar offset</button>
+        <button class="btn-apply" style="background:linear-gradient(135deg,#0891b2,#059669);margin-top:6px" onclick="focusModel(${idx})">🎯 Enfocar este modelo</button>
+        <button class="btn-remove" onclick="removeModel(${idx})">✕ Quitar del visor</button>
+      </div>
+    `
+    list.appendChild(card)
+  })
+}
+
+function applyOffset(idx) {
+  const m = models[idx]
+  const ox = parseFloat(document.getElementById('ox-'+idx).value) || 0
+  const oy = parseFloat(document.getElementById('oy-'+idx).value) || 0
+  const oz = parseFloat(document.getElementById('oz-'+idx).value) || 0
+
+  m.root.position.set(ox, oy, oz)
+  m.offset = {x: ox, y: oy, z: oz}
+
+  // Recalcular bbox después del movimiento
+  const newBbox = new THREE.Box3().setFromObject(m.root)
+  m.bbox.copy(newBbox)
+  m.bbox.getSize(m.size)
+  m.bbox.getCenter(m.center)
+  m.bboxHelper.box.copy(newBbox)
+
+  updateSidebar()
+}
+
+function focusModel(idx) {
+  const m = models[idx]
+  const sphere = new THREE.Sphere()
+  m.bbox.getBoundingSphere(sphere)
+  const dist = Math.max(sphere.radius * 2.5, 20)
+  const target = sphere.center.clone()
+  controls.target.copy(target)
+  camera.position.set(target.x + dist, target.y + dist * 0.6, target.z + dist)
+  controls.update()
+  document.querySelectorAll('.model-card').forEach(c => c.classList.remove('active'))
+  document.getElementById('card-' + idx)?.classList.add('active')
+}
+
+function removeModel(idx) {
+  const m = models[idx]
+  scene.remove(m.root)
+  scene.remove(m.bboxHelper)
+  models.splice(idx, 1)
+  updateSidebar()
+  document.getElementById('hud-count').textContent = models.length
+  if (models.length === 0) document.getElementById('drop-overlay').classList.remove('hidden')
+}
+
+// ════════════════════════════════════════════
+//  TOOLBAR
+// ════════════════════════════════════════════
+function focusAll() {
+  if (models.length === 0) return
+  const allBbox = new THREE.Box3()
+  models.forEach(m => allBbox.union(m.bbox))
+  const center = new THREE.Vector3()
+  const size   = new THREE.Vector3()
+  allBbox.getCenter(center)
+  allBbox.getSize(size)
+  const dist = Math.max(size.length() * 0.8, 50)
+  controls.target.copy(center)
+  camera.position.set(center.x + dist, center.y + dist * 0.6, center.z + dist)
+  controls.update()
+}
+
+function resetCamera() { focusAll() }
+
+function toggleGrid() {
+  grid.visible = !grid.visible
+  document.querySelectorAll('.tb-btn')[1].classList.toggle('active', grid.visible)
+}
+
+function toggleAxes() {
+  axes.visible = !axes.visible
+  document.querySelectorAll('.tb-btn')[2].classList.toggle('active', axes.visible)
+}
+
+function toggleBBoxes() {
+  showBBoxes = !showBBoxes
+  models.forEach(m => m.bboxHelper.visible = showBBoxes)
+  document.querySelectorAll('.tb-btn')[3].classList.toggle('active', showBBoxes)
+}
+
+function toggleWireframe() {
+  showWireframe = !showWireframe
+  models.forEach(m => m.root.traverse(n => {
+    if (n.isMesh) n.material.wireframe = showWireframe
+  }))
+  document.querySelectorAll('.tb-btn')[4].classList.toggle('active', showWireframe)
+}
+
+function toggleSidebar() {
+  sidebarOpen = !sidebarOpen
+  document.getElementById('sidebar').classList.toggle('collapsed', !sidebarOpen)
+  const btn = document.getElementById('toggle-sidebar')
+  btn.textContent = sidebarOpen ? '▶' : '◀'
+  btn.classList.toggle('collapsed', !sidebarOpen)
+  btn.style.right = sidebarOpen ? '346px' : '10px'
+}
+
+// ════════════════════════════════════════════
+//  DRAG & DROP
+// ════════════════════════════════════════════
+function handleFiles(files) {
+  [...files].filter(f => f.name.toLowerCase().endsWith('.glb')).forEach(loadGLB)
+}
+
+const overlay = document.getElementById('drop-overlay')
+document.addEventListener('dragover',  e => { e.preventDefault(); overlay.classList.add('drag-active') })
+document.addEventListener('dragleave', e => { if(e.relatedTarget === null) overlay.classList.remove('drag-active') })
+document.addEventListener('drop', e => {
+  e.preventDefault()
+  overlay.classList.remove('drag-active')
+  handleFiles(e.dataTransfer.files)
+})
+document.getElementById('file-input').addEventListener('change', e => handleFiles(e.target.files))
+document.getElementById('file-input-more').addEventListener('change', e => handleFiles(e.target.files))
+
+// ════════════════════════════════════════════
+//  RENDER LOOP
+// ════════════════════════════════════════════
+const clock = new THREE.Clock()
+
+function animate() {
+  requestAnimationFrame(animate)
+  const delta = clock.getDelta()
+  controls.update()
+
+  // HUD camera update
+  const p = camera.position
+  document.getElementById('hud-cam').textContent =
+    `${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}`
+
+  renderer.render(scene, camera)
+}
+animate()
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight
+  camera.updateProjectionMatrix()
+  renderer.setSize(window.innerWidth, window.innerHeight)
+})
+</script>
+</body>
+</html>

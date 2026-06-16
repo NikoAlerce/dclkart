@@ -1846,7 +1846,7 @@
       "58,29",
       "58,30"
     ],
-    "base": "0,0"
+    "base": "35,20"
   },
   "spawnPoints": [
     {
@@ -1854,22 +1854,22 @@
       "default": true,
       "position": {
         "x": [
-          361,
-          371
+          1.2,
+          16.2
         ],
         "y": [
-          9,
-          9
+          10,
+          12
         ],
         "z": [
-          320,
-          325
+          -3,
+          7
         ]
       },
       "cameraTarget": {
-        "x": 366,
-        "y": 8.6,
-        "z": 315
+        "x": 8.7,
+        "y": 11,
+        "z": 7
       }
     }
   ],
@@ -1879,14 +1879,10 @@
     "nearbyVoiceChat": "enabled"
   },
   "skyboxConfig": {
-    "fixedTime": 43200
+    "fixedTime": 73800
   },
-  "worldConfiguration": {
+  "worldConfiguration_DEV": {
     "name": "nikoalerce.dcl.eth"
   },
-  "creator": "",
-  "source": {
-    "origin": "creator-hub",
-    "projectId": "0a32469d-d9b6-47db-9148-9caf6768496c"
-  }
+  "creator": ""
 }

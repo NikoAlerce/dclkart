@@ -11,7 +11,11 @@
   },
   "devDependencies": {
     "@dcl/js-runtime": "7.23.3",
-    "@dcl/sdk": "latest"
+    "@dcl/sdk": "latest",
+    "@gltf-transform/core": "^4.4.0",
+    "@gltf-transform/extensions": "^4.4.0",
+    "@gltf-transform/functions": "^4.4.0",
+    "draco3d": "^1.5.7"
   },
   "engines": {
     "node": ">=16.0.0",
