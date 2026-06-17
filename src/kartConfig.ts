@@ -78,19 +78,19 @@ function kartPos(row: number, col: number): Vector3 {
 // │    friction: 0.95 },      ← se frena más rápido                           │
 // └─────────────────────────────────────────────────────────────────────────────┘
 
+// Posiciones fijadas sobre el parking lot real (capturado en Bevy: spawn ~ -187, -20).
+// Fila de 10 vehículos separados 3m sobre el eje X, a Z=-26 (al lado del spawn).
 export const KART_CONFIGS: KartConfig[] = [
-  // ── Fila delantera (1-5) Z = 321.5 ───────────────────────────────────────
-  { id: 1,  modelPath: 'assets/models/kart.glb',  spawnPos: Vector3.create(31.8, 10.1, -16.7), spawnRotY: 0.0},
-  { id: 2,  modelPath: 'assets/models/kart2.glb', spawnPos: Vector3.create(27.3, 9.1, 1.5), spawnRotY: 0.0},
-  { id: 3,  modelPath: 'assets/models/kart3.glb', spawnPos: Vector3.create(25.2, 8.4, 2.8), spawnRotY: 0.0,
+  { id: 1,  modelPath: 'assets/models/kart.glb',  spawnPos: Vector3.create(-200.5, 10.85, -26), spawnRotY: 0.0},
+  { id: 2,  modelPath: 'assets/models/kart2.glb', spawnPos: Vector3.create(-197.5, 10.85, -26), spawnRotY: 0.0},
+  { id: 3,  modelPath: 'assets/models/kart3.glb', spawnPos: Vector3.create(-194.5, 10.85, -26), spawnRotY: 0.0,
     vehicleType: 'ship',
     maxSpeed: 48, acceleration: 28, friction: 0.55, turnSpeed: 95 },
-  { id: 4,  modelPath: 'assets/models/kart4.glb', spawnPos: Vector3.create(24.2, 8.7, 6.3), spawnRotY: 0.0},
-  { id: 5,  modelPath: 'assets/models/kart5.glb', spawnPos: Vector3.create(22.0, 8.5, 7.3), spawnRotY: 0.0},
-  // ── Fila trasera (6-10) Z = 318.5 ────────────────────────────────────────
-  { id: 6,  modelPath: 'assets/models/kart6.glb', spawnPos: Vector3.create(29.2, 10.7, -1.5), spawnRotY: 0.0},
-  { id: 7,  modelPath: 'assets/models/kart7.glb', spawnPos: Vector3.create(21.8, 8.6, 10.6), spawnRotY: 0.0},
-  { id: 8,  modelPath: 'assets/models/kart8.glb', spawnPos: Vector3.create(21.0, 8.7, 16.6), spawnRotY: 0.0},
-  { id: 9,  modelPath: 'assets/models/kart9.glb', spawnPos: Vector3.create(20.9, 8.8, 19.1), spawnRotY: 0.0},
-  { id: 10, modelPath: 'assets/models/kart10.glb',spawnPos: Vector3.create(-107.2, 10.2, -21.1), spawnRotY: 0.0},
+  { id: 4,  modelPath: 'assets/models/kart4.glb', spawnPos: Vector3.create(-191.5, 10.85, -26), spawnRotY: 0.0},
+  { id: 5,  modelPath: 'assets/models/kart5.glb', spawnPos: Vector3.create(-188.5, 10.85, -26), spawnRotY: 0.0},
+  { id: 6,  modelPath: 'assets/models/kart6.glb', spawnPos: Vector3.create(-185.5, 10.85, -26), spawnRotY: 0.0},
+  { id: 7,  modelPath: 'assets/models/kart7.glb', spawnPos: Vector3.create(-182.5, 10.85, -26), spawnRotY: 0.0},
+  { id: 8,  modelPath: 'assets/models/kart8.glb', spawnPos: Vector3.create(-179.5, 10.85, -26), spawnRotY: 0.0},
+  { id: 9,  modelPath: 'assets/models/kart9.glb', spawnPos: Vector3.create(-176.5, 10.85, -26), spawnRotY: 0.0},
+  { id: 10, modelPath: 'assets/models/kart10.glb',spawnPos: Vector3.create(-173.5, 10.85, -26), spawnRotY: 0.0},
 ]

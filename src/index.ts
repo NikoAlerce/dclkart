@@ -1,4 +1,4 @@
-import { engine, Transform, GltfContainer, ColliderLayer, MeshCollider, LightSource, MeshRenderer, Material } from '@dcl/sdk/ecs'
+import { engine, Transform, GltfContainer, ColliderLayer, MeshCollider, LightSource, MeshRenderer, Material, Raycast, RaycastResult, RaycastQueryType } from '@dcl/sdk/ecs'
 import { Vector3, Color3, Color4, Quaternion } from '@dcl/sdk/math'
 import { movePlayerTo } from '~system/RestrictedActions'
 import { kartMovementSystem, turboParticleSystem } from './kartSystem'
@@ -70,7 +70,7 @@ export function main() {
   const spawnPlatform = engine.addEntity()
   Transform.create(spawnPlatform, {
     position: SPAWN_PLATFORM,
-    scale:    Vector3.create(20, 0.1, 20)
+    scale:    Vector3.create(700, 0.5, 700)   // piso invisible enorme: caminás por toda la escena sin caerte
   })
   MeshCollider.setBox(spawnPlatform)
 
@@ -142,6 +142,60 @@ export function main() {
 
   // 5. Inicializar partículas mágicas flotantes alrededor del jugador
   setupWindParticles()
+
+  // 5.5 [HELPER] Logger de posición en vivo: reporta la posición del jugador cada
+  // ~1s al editor-server (puerto 9000). Sirve para capturar coordenadas exactas
+  // caminando en Bevy hasta el lugar deseado. (No afecta producción: el fetch falla
+  // silenciosamente si el server no está.)
+  let posLogTimer = 0
+  engine.addSystem((dt) => {
+    posLogTimer += dt
+    if (posLogTimer < 1.0) return
+    posLogTimer = 0
+    if (!Transform.has(engine.PlayerEntity)) return
+    const p = Transform.get(engine.PlayerEntity).position
+    const msg = `POS_LIVE X=${p.x.toFixed(2)} Y=${p.y.toFixed(2)} Z=${p.z.toFixed(2)}`
+    fetch(`http://localhost:9000/api/diagnostics?log=${encodeURIComponent(msg)}`).catch(() => {})
+  })
+
+  // 5.7 [HELPER] Sondas de altura: raycast hacia abajo en el spawn y en los extremos
+  // de la fila de karts para conocer la altura REAL del suelo (parking lot) e ignorar
+  // la plataforma invisible. Reporta la malla más baja "de pista" encontrada.
+  const probePoints: { name: string; x: number; z: number }[] = [
+    { name: 'SPAWN', x: -187.2, z: -20.4 },
+    { name: 'KART_IZQ', x: -200.5, z: -26 },
+    { name: 'KART_DER', x: -173.5, z: -26 }
+  ]
+  const probeEntities = probePoints.map((p) => {
+    const e = engine.addEntity()
+    Transform.create(e, { position: Vector3.create(p.x, 40, p.z) })
+    Raycast.createOrReplace(e, {
+      direction: { $case: 'globalDirection', globalDirection: Vector3.create(0, -1, 0) },
+      maxDistance: 80,
+      queryType: RaycastQueryType.RQT_QUERY_ALL,
+      continuous: false,
+      collisionMask: ColliderLayer.CL_PHYSICS
+    })
+    return { e, name: p.name }
+  })
+  let probesDone = false
+  engine.addSystem(() => {
+    if (probesDone) return
+    let allReady = true
+    for (const { e } of probeEntities) {
+      if (!RaycastResult.getOrNull(e)) { allReady = false; break }
+    }
+    if (!allReady) return
+    probesDone = true
+    for (const { e, name } of probeEntities) {
+      const r = RaycastResult.get(e)
+      const hits = [...r.hits].filter((h) => h.position).sort((a, b) => (a.position!.y) - (b.position!.y))
+      for (const h of hits) {
+        const msg = `PROBE_${name} hitY=${h.position!.y.toFixed(2)} mesh=${h.meshName || '?'}`
+        fetch(`http://localhost:9000/api/diagnostics?log=${encodeURIComponent(msg)}`).catch(() => {})
+      }
+    }
+  })
 
   // 6. Diagnóstico de coordenadas en consola
   let diagTime = 0
