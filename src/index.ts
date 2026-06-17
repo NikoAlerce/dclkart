@@ -88,8 +88,10 @@ export function main() {
     const playerTransform = Transform.get(engine.PlayerEntity)
     const distToSpawn = Vector3.distance(playerTransform.position, SPAWN_POSITION)
 
-    // Si el jugador ya está cerca del punto de spawn (menos de 5 metros), el spawn fue exitoso
-    if (distToSpawn < 5.0) {
+    // Si el jugador ya está prácticamente en el punto de spawn (menos de 2 metros), el spawn fue exitoso.
+    // Tolerancia ajustada de 5→2m: con spawn determinístico el jugador cae casi exacto, así que una
+    // tolerancia amplia ya no es necesaria y antes dejaba pasar spawns desviados sin corregir.
+    if (distToSpawn < 2.0) {
       spawnAttempts = 5
       console.log(`[SPAWN] Jugador posicionado correctamente en el spawn point.`)
       return

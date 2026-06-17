@@ -1,78 +1,89 @@
-# Decentraland Mario Kart - Guía para Desarrolladores
+# Guía de desarrollo — nikoalerce.dcl.eth
 
-Este documento resume la arquitectura, físicas y flujos de trabajo de este proyecto de carreras construido sobre Decentraland SDK 7, para facilitar la integración de futuros desarrolladores.
+Documentación técnica del World. Reemplaza toda la documentación vieja (que describía esto como un juego de carreras con vueltas y checkpoints — ese diseño nunca se completó y ya no es el objetivo del proyecto).
 
-## 🚀 Cómo correr el proyecto localmente (¡IMPORTANTE: BEVY-WEB!)
+## Qué es esto hoy
 
-Para levantar el servidor de pruebas local, abrí una terminal en la raíz del proyecto y ejecutá ESTE comando exacto:
+Un World de Decentraland que funciona como base personal: terreno recorrible en vehículos, con edificios de arte y edificios de venta de packs (LAND + edificio + wearable) para newcomers. Está en construcción activa: se posicionan elementos con el editor 3D propio.
+
+---
+
+## 1. Arquitectura de código
+
+| Archivo | Rol |
+|---|---|
+| `src/index.ts` | Entry point. Instancia los modelos del terreno/edificios, la plataforma de spawn, el sistema de teletransporte inicial y de rescate, registra los sistemas de física y la UI. |
+| `src/kartSystem.ts` | Motor de físicas custom de los vehículos (no usa el Character Controller estándar de DCL). Aceleración, drift, boost, modo nave (vuelo libre), sensores de piso/pared por raycast, cámara elástica, partículas de turbo. |
+| `src/kart.ts` | Creación de vehículos, lógica de subir/bajar, colliders, sensores, sincronización multijugador (`syncEntity`), limpieza de duplicados cargados por el Creator Hub. |
+| `src/kartConfig.ts` | ⭐ Catálogo declarativo de vehículos: modelo, posición de spawn, tipo (`kart` o `ship`), parámetros de física individuales. |
+| `src/components.ts` | Componentes ECS custom: `KartData`, `KartOwner`, `TurboParticle`. |
+| `src/ui.tsx` | HUD: coordenadas, panel de debug de colisiones, controles, minimapa. |
+| `src/raceState.ts` | Estado global compartido en memoria (posición del vehículo activo, tipo, flags de debug). El nombre es un remanente del diseño de carrera original; hoy es solo estado compartido entre sistemas y UI. |
+| `src/spawnConfig.ts` | Posición/rotación de spawn — generado automáticamente por el editor 3D al mover la caja verde de spawn. |
+| `src/windParticles.ts`, `src/lightsConfig.ts` | Ambientación (partículas mágicas; `lightsConfig.ts` con 208 posiciones de faroles **no está conectado actualmente** — quedó del diseño viejo, revisar si se reactiva o se borra). |
+
+### Sistema de coordenadas
+
+La parcela base del World es `35,20` (`scene.json` → `scene.base`). Todas las posiciones en `src/*.ts` son **locales a esa base**, no coordenadas absolutas de Decentraland. Si alguna vez cambiás la parcela base, hay que re-desplazar todas las posiciones (ver historial de commits de `scene.json` / `kartConfig.ts` si necesitás la fórmula de conversión).
+
+### Vehículos: tipos
+
+- **`kart`**: anda por el terreno, sigue la normal del suelo, drift con boost, rebota contra paredes.
+- **`ship`**: ignora la gravedad, vuela libremente en los 3 ejes (R/F para subir/bajar), pensado para recorrer el World por arriba.
+
+Para agregar un vehículo nuevo: copiá el `.glb` a `assets/models/`, agregá una entrada en `KART_CONFIGS` (`src/kartConfig.ts`) con un `id` único y estable (es el enumId de sincronización de red — nunca lo reutilices ni lo cambies en un vehículo ya publicado).
+
+---
+
+## 2. Editor 3D propio (no oficial)
+
+Herramienta custom para posicionar elementos visualmente sin editar TypeScript a mano.
 
 ```bash
-npx sdk-commands start --bevy-web
+node glb-editor-server.js     # levanta el server en :9000
 ```
 
-> [!WARNING]
-> **¿Por qué `--bevy-web` y no el comando normal?** 
-> Nos costó sangre llegar a esta conclusión. El cliente web estándar de Decentraland tiene problemas graves de rendimiento y latencia a la hora de procesar físicas a alta velocidad. Si corrés el proyecto sin la bandera `--bevy-web`, el juego te va a andar trabado, el framerate de la cámara va a temblar y los `Raycasts` de los choques van a fallar. El motor "Bevy" es el nuevo cliente experimental en Rust/WASM y es **el único** capaz de correr nuestras físicas de kart a 60 FPS estables. ¡No lo corras sin esa bandera!
+Abrí `http://localhost:9000`. Es Three.js (`glb-editor.html`) + un server Node (`glb-editor-server.js`) que **parsea y reescribe directamente el código fuente real** por regex:
 
-Una vez que termine de compilar, te va a dar un link en la consola (usualmente `http://127.0.0.1:8001` o similar) que podés abrir en tu navegador.
+| Lo que movés | Qué reescribe |
+|---|---|
+| Edificios / modelos del `index.ts` | `src/index.ts` (`Transform.create`) |
+| Vehículos | `src/kartConfig.ts` (`spawnPos`, `spawnRotY`, `scale`) |
+| Caja verde de spawn | `scene.json` + regenera `src/spawnConfig.ts` |
+| Tamaño del World (parcelas) | `scene.json` (`scene.parcels` + `base`) — **solo afecta el preview local**, no el World real en DCL |
 
-> **Importante:** Decentraland cachea agresivamente los archivos `.glb`. Si modificás la malla 3D de la pista, a veces vas a tener que reiniciar este comando o hacer `Ctrl + F5` en el navegador para ver los cambios.
+Controles: clic para seleccionar (Shift+clic para selección múltiple), gizmo de mover/rotar/escalar (atajos `G`/`R`/`S`), `Ctrl+Z` para deshacer, botón "Cargar todos" para traer todos los `.glb` de `assets/models/` a la escena.
 
----
+### Limitaciones conocidas
 
-## 🛠️ Arquitectura de Físicas (Game Feel)
+1. **No agrega entidades nuevas.** Solo reposiciona lo que ya existe en `index.ts`. Para colocar un edificio nuevo hay que agregarlo primero a mano (`GltfContainer.create` + `Transform.create` en `index.ts`) — recién ahí el editor lo puede mover. Es la limitación más importante hoy, en plena fase de colocar edificios.
+2. **Bug pendiente (`task_38ff5954`):** el parser de vehículos en `glb-editor-server.js` (función `parseKartConfigs`, regex de `spawnRotY`/`scale`) tiene un error de escape que hace que siempre lea rotación=0 y escala=1, sin importar el valor real en `kartConfig.ts`. Si rotás o escalás un vehículo y guardás, te puede pisar esos valores. Mientras no esté arreglado: verificá a mano en `kartConfig.ts` después de guardar un vehículo rotado/escalado.
+3. **Override hardcodeado de altura del spawn:** `updateSpawnArea()` ajusta la Y automáticamente según la posición X (`x > -60 → Y=11`, `x < -140 → Y=9`), restos del layout de pista viejo. Si movés el spawn a una zona nueva del terreno, revisá la Y resultante en `scene.json` — puede no ser la que pusiste en el editor.
 
-El mayor valor técnico de este proyecto es que **NO utiliza el Character Controller estándar** de Decentraland, sino un motor de físicas 100% custom (`src/kartSystem.ts`) diseñado para imitar el "Game Feel" de juegos Arcade de consola.
-
-*   **Curva de Dirección (Steering):** Se implementó una curva inversa. A baja velocidad el radio de giro está multiplicado por `x1.6` (permite giros cerrados), y a alta velocidad baja a `x1.4` (evita vuelcos incontrolables).
-*   **Drift y Slip Angle:** Cuando el jugador presiona Shift, se activa el derrape. El modelo visual del kart gira dinámicamente hasta 65 grados respecto a su trayectoria física real. Al soltar la tecla, un sistema de resortes matemáticos (pendulum) devuelve el auto a su centro de manera suave.
-*   **Partículas y Luces:** El kart cuenta con una luz dinámica (`LightSource`) debajo del chasis y un emisor de partículas que cambia de color según la duración del derrape (Amarillo -> Naranja -> Cyan).
-*   **Cámara Elástica (Lerp):** La cámara persigue al kart de forma elástica, retrasándose un poco al doblar y alejándose (zoom invertido) al llegar a máxima velocidad para dar sensación de vértigo.
-
----
-
-## 🏎️ Gestor de Carrera y Checkpoints
-
-La lógica de carrera se encuentra en `src/raceState.ts` y está acoplada al sistema de colisiones.
-
-1.  **Estados:** Existen 4 estados (`LOBBY`, `COUNTDOWN`, `RACING`, `FINISHED`). Al subir al kart, los controles se bloquean y comienza una cuenta regresiva.
-2.  **Sensores Fantasma:** El kart proyecta un `Raycast` hacia adelante. Si choca con un muro que tenga la palabra `checkpoint` en su nombre, el sistema omite el rebote (fricción de pared) y lo registra como un paso de vuelta válido en `RaceState`.
-3.  **Orden Estricto:** El jugador está obligado a tocar los checkpoints secuencialmente (`0 -> 1 -> 2 -> 3`).
+`glb-inspector.html` es una herramienta distinta y más simple: visor standalone de un único `.glb` por drag & drop, sin servidor ni escritura de archivos — útil para chequear un modelo antes de importarlo.
 
 ---
 
-## 🎨 Flujo de Trabajo en Blender (Modelado de Pistas)
+## 3. Despliegue (deploy)
 
-Si necesitás crear nuevas pistas, modificá el archivo `track.glb` en la raíz del proyecto siguiendo estas reglas estrictas:
+```bash
+npx sdk-commands deploy --target-content https://worlds-content-server.decentraland.org
+```
 
-1.  **Formatos de Textura:** Decentraland SDK 7 / Bevy **NO SOPORTA WebP** nativamente para todas las configuraciones. Al exportar desde Blender 4.x, andá a `Data > Images > Format` y asegurate de elegir `JPEG` o `PNG`. Si exportás en WebP, la pista entera será invisible.
-2.  **Checkpoints:** Para crear puntos de control, dibujá planos invisibles a lo largo de la pista y nombralos exactamente así en la jerarquía:
-    *   `checkpoint_0_collider` (Para la línea de largada/llegada)
-    *   `checkpoint_1_collider` (Para el 25% de la pista)
-    *   `checkpoint_2_collider` (Para el 50%), etc.
-    *   *Nota: El sufijo `_collider` hace que Decentraland los cargue como paredes físicas invisibles de forma automática.*
+Se abre una pestaña pidiendo conectar la wallet `nikoalerce.dcl.eth` y firmar (gratis, sin gas). El deploy tarda 2-5 minutos.
+
+### Problemas comunes al desplegar
+
+- **VPN bloqueada por Cloudflare:** el content server de Decentraland está detrás de Cloudflare, que bloquea rangos de IP de VPNs públicas (Proton, WARP, etc.). Si el deploy falla con "Sorry, you have been blocked", desactivá la VPN. Si tu IP residencial tiene mala reputación (común en conexiones rurales), probá con datos móviles como hotspot.
+- **Peso excesivo:** mantené `.dclignore` actualizado para no subir modelos `.blend`/`.fbx`, backups, ni herramientas locales (`glb-editor*`, `scratch/`, etc. — ya están excluidos). Subir de más puede hacer que la conexión se corte por timeout en redes lentas.
+- **Deeplink roto en la app de escritorio** ("We couldn't open the deeplink in Decentraland"): pasa por caracteres URL-encodeados en el link o por un proceso colgado de una corrida anterior.
+  1. `taskkill /F /IM Decentraland.exe` (Windows) para liberar el puerto.
+  2. Pegá el link **sin codificar** en la barra de direcciones del navegador (no hagas clic directo desde un chat/IDE, los protocolos custom suelen bloquearse ahí): `decentraland://realm=http://127.0.0.1:8000&position=0,0&dclenv=org&local-scene=true` (ajustá el puerto si tu servidor corre en otro).
+
 ---
 
-## 🌍 Cómo subir (Deploy) este proyecto a tu propio "World" (DCL Name)
+## 4. Problemas conocidos / pendientes
 
-Cuando el juego esté listo para publicarse en tu mundo personal (vinculado a tu nombre de Decentraland, por ejemplo `tunombre.dcl.eth`), tenés que seguir estos 3 pasos:
-
-1. **Configurar el nombre del Mundo en `scene.json`:**
-   Abrí el archivo `scene.json` y agregá este bloque al final del archivo (antes de la última llave `}`):
-   ```json
-   "worldConfiguration": {
-     "name": "tunombre.dcl.eth"
-   }
-   ```
-   *(Asegurate de reemplazar `tunombre.dcl.eth` por el nombre real que tenés en tu wallet).*
-
-2. **Ejecutar el comando de subida:**
-   En tu terminal, cancelá el servidor de prueba (`Ctrl + C`) y ejecutá:
-   ```bash
-   npx sdk-commands deploy
-   ```
-
-3. **Firmar con tu Wallet:**
-   El comando va a abrir automáticamente una pestaña en tu navegador. Decentraland te va a pedir que conectes tu billetera (Metamask, etc.) donde tenés guardado el nombre `.dcl.eth` y que firmes la transacción. Es una firma gratuita (no cobra gas fee de Ethereum).
-
-¡Listo! En un par de minutos tu circuito de carreras va a estar en vivo en `https://play.decentraland.org/?realm=tunombre.dcl.eth`.
+- `src/lightsConfig.ts` (208 posiciones de faroles) no se usa en ningún lado — decidir si se reactiva el spawn de luces o se borra.
+- El minimapa en `src/ui.tsx` usa un rango de coordenadas (`TRACK_MIN_X/MAX_X/MIN_Z/MAX_Z`) que corresponde al layout de pista viejo, no a las coordenadas locales actuales del terreno — hoy el punto del minimapa queda siempre clampeado.
+- Bugs del editor 3D: ver sección 2.

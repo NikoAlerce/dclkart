@@ -111,7 +111,7 @@ function parseKartConfigs() {
     }
     
     // Parse spawnRotY (yaw in degrees)
-    const rotM = block.match(/spawnRotY:\s*(-?\\d+\\.?\\d*)/)
+    const rotM = block.match(/spawnRotY:\s*(-?\d+\.?\d*)/)
     const yawDeg = rotM ? parseFloat(rotM[1]) : 0.0
     // Convert yawDeg to Quaternion (yaw rotation in ThreeJS around Y axis)
     const yawRad = yawDeg * Math.PI / 180
@@ -120,7 +120,7 @@ function parseKartConfigs() {
     const rotation = { x: 0, y: qy, z: 0, w: qw }
     
     // Parse scale
-    const scaleM = block.match(/scale:\s*(-?\\d+\\.?\\d*)/)
+    const scaleM = block.match(/scale:\s*(-?\d+\.?\d*)/)
     const s = scaleM ? parseFloat(scaleM[1]) : 1.0
     const scale = { x: s, y: s, z: s }
     
@@ -291,43 +291,29 @@ function updateKartConfig(id, x, y, z, rx, ry, rz, rw, sx) {
 }
 
 function updateSpawnArea(x, y, z, rx, ry, rz, rw, sx, sy, sz) {
-  // Auto-adjust Y based on horizontal area to prevent falling through elevated models
-  let adjustedY = y
-  if (x > -60) {
-    adjustedY = 11.0 // Parking lot surface is at ~10.7
-  } else if (x < -140) {
-    adjustedY = 9.0  // Track starting line surface is at ~8.6
-  }
+  // El spawn de DCL es DETERMINÍSTICO: escribimos un punto exacto (rango de ancho 0),
+  // no un área. Si min !== max, Decentraland spawnea al jugador en un punto ALEATORIO
+  // dentro del rango — por eso antes "aparecía en cualquier lado". El centro de la caja
+  // del editor = el punto exacto donde aparece el jugador.
+  const adjustedY = y
 
   const scene = JSON.parse(fs.readFileSync(SCENE_JSON, 'utf8'))
   if (!scene.spawnPoints || scene.spawnPoints.length === 0) {
     scene.spawnPoints = [{
       name: "spawn_paddock",
       default: true,
-      position: { x: [3.7, 13.7], y: [11.0, 11.0], z: [0.3, 5.3] },
-      cameraTarget: { x: 8.7, y: 10.6, z: -4.7 }
+      position: { x: [8.7, 8.7], y: [11.0, 11.0], z: [2.0, 2.0] },
+      cameraTarget: { x: 8.7, y: 11.0, z: 7.0 }
     }]
   }
   const sp = scene.spawnPoints[0]
 
-  const px = sp.position.x || [3.7, 13.7]
-  const py = sp.position.y || [11.0, 11.0]
-  const pz = sp.position.z || [0.3, 5.3]
+  const rx0 = Math.round(x * 10) / 10
+  const ry0 = Math.round(adjustedY * 10) / 10
+  const rz0 = Math.round(z * 10) / 10
 
-  const baseSizeX = Math.abs(px[1] - px[0]) || 10
-  const baseSizeY = Math.abs(py[1] - py[0]) || 2
-  const baseSizeZ = Math.abs(pz[1] - pz[0]) || 5
-
-  const sizeX = sx !== undefined ? baseSizeX * sx : baseSizeX
-  const sizeY = sy !== undefined ? baseSizeY * sy : baseSizeY
-  const sizeZ = sz !== undefined ? baseSizeZ * sz : baseSizeZ
-
-  sp.position.x[0] = Math.round((x - sizeX / 2) * 10) / 10
-  sp.position.x[1] = Math.round((x + sizeX / 2) * 10) / 10
-  sp.position.y[0] = Math.round((adjustedY - sizeY / 2) * 10) / 10
-  sp.position.y[1] = Math.round((adjustedY + sizeY / 2) * 10) / 10
-  sp.position.z[0] = Math.round((z - sizeZ / 2) * 10) / 10
-  sp.position.z[1] = Math.round((z + sizeZ / 2) * 10) / 10
+  // Punto único (min === max) → spawn exacto, sin aleatoriedad.
+  sp.position = { x: [rx0, rx0], y: [ry0, ry0], z: [rz0, rz0] }
 
   // Calculate spawnRotY (yaw) from Quaternion
   let yawDeg = 180.0 // Default looking South (z - 5)
