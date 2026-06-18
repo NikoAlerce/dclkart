@@ -86,7 +86,9 @@ export function createKart(config: KartConfig): number {
     modelEntity:  kartModel,
     scale:        scaleMult,
     vehicleType:  config.vehicleType ?? 'kart',
-    shipVertSpeed: 0
+    shipVertSpeed: 0,
+    modelYawOffset: config.modelYawOffset ?? -90,
+    groundOffsetY: config.groundOffsetY ?? 0.5
   })
 
   // ── KartOwner: libre al inicio ───────────────────────────────────────────

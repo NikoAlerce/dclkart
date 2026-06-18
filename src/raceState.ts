@@ -1,6 +1,7 @@
 export const RaceState = {
   isOccupied: false,
   isTurboActive: false,
+  ridingMonster: false,   // true mientras el jugador está montado sobre el monstruo
   // Posición en vivo del kart para el minimapa
   kartPositionX: 0,
   kartPositionY: 0,

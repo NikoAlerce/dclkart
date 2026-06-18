@@ -145,12 +145,11 @@ const uiComponent = () => {
 
     {/* ── BOTTOM RIGHT: CUSTOM MINIMAP ── */}
     {RaceState.isOccupied && (() => {
-      // ── Coordenadas mundiales de los bordes del track ──
-      // La pista en el mundo va de X:470→709 y Z:67→403
-      const TRACK_MIN_X = 470
-      const TRACK_MAX_X = 709
-      const TRACK_MIN_Z = 67
-      const TRACK_MAX_Z = 403
+      // ── Coordenadas locales de los bordes del track (calibradas para base 35,20) ──
+      const TRACK_MIN_X = -90
+      const TRACK_MAX_X = 149
+      const TRACK_MIN_Z = -253
+      const TRACK_MAX_Z = 83
 
       // Mapear posición del kart a porcentaje en la imagen
       // En Blender: X crece hacia la derecha, Z crece hacia arriba

@@ -33,7 +33,13 @@ export const KartData = engine.defineComponent('KartData', {
   hideAreaEntity:     Schemas.Optional(Schemas.Entity),
   scale:              Schemas.Float,
   vehicleType:        Schemas.String,   // 'kart' | 'ship'
-  shipVertSpeed:      Schemas.Float     // velocidad vertical actual en modo nave
+  shipVertSpeed:      Schemas.Float,    // velocidad vertical actual en modo nave
+  // Giro Y (grados) que se aplica al MODELO para alinear su trompa con el rumbo.
+  // El modelo estándar usa -90; un GLB autorado en otro eje necesita otro valor.
+  modelYawOffset:     Schemas.Float,
+  // Distancia (a escala 1) del origen del modelo al piso → se multiplica por scale
+  // para apoyar el kart sobre el terreno al manejar. Modelos altos necesitan más.
+  groundOffsetY:      Schemas.Float
 })
 
 // ─── KartOwner: quién está manejando este kart (sincronizado en red) ──────────

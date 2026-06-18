@@ -81,6 +81,20 @@ function spawnTurboParticle(
 // Simula el "peso" del volante y elimina el giro brusco
 let currentSteering   = 0
 
+// Overdrive de recta: se acumula yendo derecho a fondo cerca del tope y sube un
+// poco la velocidad final. Se desarma rápido al doblar o soltar el acelerador.
+let straightOverdrive = 0
+
+// ── Derrape real (grip lateral) ───────────────────────────────────────────────
+// velX/velZ es el vector de velocidad REAL del auto en el mundo (XZ). El auto
+// apunta hacia su rumbo (currentYaw) pero se MUEVE según este vector: la diferencia
+// es el slip angle. El grip lateral decide cuánto del momentum de costado persiste
+// (poco grip en drift = derrapa; mucho grip normal = agarra y va donde apunta).
+let velX = 0
+let velZ = 0
+// Patada inicial: al iniciar el drift el tren trasero se suelta de golpe (un frame).
+let driftKick = 0
+
 // Spring-damper para el lean visual del modelo
 let leanAngle         = 0    // grados actuales de inclinación
 let leanVelocity      = 0    // velocidad de la inclinación (grados/s)
@@ -94,7 +108,7 @@ let slipAngle         = 0
 let slipVelocity      = 0
 const SLIP_STIFFNESS  = 120  // Resortes rígidos para girar rápido visualmente
 const SLIP_DAMPING    = 10
-const MAX_DRIFT_SLIP  = 65   // 65 grados de cruce al derrapar
+const MAX_DRIFT_SLIP  = 45   // grados de cruce visual extra (el derrape físico ya aporta el resto)
 
 // Cooldown del rebote contra paredes
 let bounceCooldown    = 0
@@ -230,6 +244,8 @@ export function kartMovementSystem(dt: number) {
       checkpointTimer           = 0
       bounceCooldown            = 0
       currentSteering           = 0
+      straightOverdrive         = 0
+      velX = 0; velZ = 0; driftKick = 0
       wasOccupiedLastFrame      = false
 
       InputModifier.deleteFrom(engine.PlayerEntity)
@@ -282,14 +298,30 @@ export function kartMovementSystem(dt: number) {
       const camComp = MainCamera.getMutableOrNull(engine.CameraEntity)
       if (camComp) camComp.virtualCameraEntity = undefined
 
-      const rightVec = Vector3.rotate(Vector3.Right(), transform.rotation)
-      const exitPos  = Vector3.add(transform.position, Vector3.scale(rightVec, 2.0))
-      exitPos.y = Math.max(exitPos.y, lastKnownGroundY + 0.1)
+      // ── SALIDA PULIDA ───────────────────────────────────────────────────
+      // Distancia lateral escalada con el tamaño del kart para no quedar encima.
+      // El collider mide 1.5·scale de ancho → medio ancho = 0.75·scale; le sumamos
+      // margen para el avatar. Karts grandes te sueltan más lejos automáticamente.
+      const rightVec = Vector3.rotate(Vector3.Right(),   transform.rotation)
+      const fwdVec   = Vector3.rotate(Vector3.Forward(), transform.rotation)
+      const sideDist = 1.1 * scaleMult + 1.3
+      const exitPos  = Vector3.add(transform.position, Vector3.scale(rightVec, sideDist))
+      // Nave: te bajás A LA ALTURA donde está volando (caés en el lugar). Kart: a ras del piso.
+      // Antes la nave usaba lastKnownGroundY, que volando alto queda obsoleto/bajo → el rescate
+      // (Y<2) te mandaba al spawn.
+      exitPos.y = isShip ? transform.position.y : lastKnownGroundY + 0.1
       
       const playerT = Transform.getMutableOrNull(engine.PlayerEntity)
       if (playerT) playerT.parent = undefined
       
-      movePlayerTo({ newRelativePosition: exitPos, cameraTarget: transform.position }).catch(() => {})
+      // Cámara mirando hacia ADELANTE (rumbo del kart), no de vuelta al kart:
+      // evita el latigazo al recuperar la vista del avatar. Salida natural.
+      const exitCamTarget = Vector3.create(
+        exitPos.x + fwdVec.x * 5,
+        exitPos.y + 1.6,
+        exitPos.z + fwdVec.z * 5
+      )
+      movePlayerTo({ newRelativePosition: exitPos, cameraTarget: exitCamTarget }).catch(() => {})
       continue
     }
 
@@ -307,6 +339,7 @@ export function kartMovementSystem(dt: number) {
       leanVelocity             = 0
       currentSteering          = 0
       coyoteFrames             = 0
+      velX = 0; velZ = 0; driftKick = 0
       lastKnownGroundY         = mutableKart.lastSafeY
       continue
     }
@@ -392,8 +425,8 @@ export function kartMovementSystem(dt: number) {
 
       // ── Movimiento horizontal ──────────────────────────────────────────
       const fwdShip = Vector3.rotate(Vector3.Forward(), transform.rotation)
-      transform.position.x = Math.max(2, Math.min(942, transform.position.x + fwdShip.x * mutableKart.currentSpeed * dt))
-      transform.position.z = Math.max(2, Math.min(494, transform.position.z + fwdShip.z * mutableKart.currentSpeed * dt))
+      transform.position.x += fwdShip.x * mutableKart.currentSpeed * dt
+      transform.position.z += fwdShip.z * mutableKart.currentSpeed * dt
 
       // ── Empuje Vertical R/F ───────────────────────────────────────────
       const SHIP_VERT_ACCEL  = 45.0  // aceleración vertical m/s²
@@ -451,7 +484,7 @@ export function kartMovementSystem(dt: number) {
       if (mutableKart.modelEntity) {
         const modelT = Transform.getMutableOrNull(mutableKart.modelEntity as any)
         if (modelT) {
-          const q_base = Quaternion.fromEulerDegrees(0, -90, 0)
+          const q_base = Quaternion.fromEulerDegrees(0, mutableKart.modelYawOffset, 0)
           const q_lean = Quaternion.fromEulerDegrees(leanAngle, 0, 0)
           modelT.rotation = Quaternion.multiply(q_base, q_lean)
         }
@@ -703,13 +736,27 @@ export function kartMovementSystem(dt: number) {
       }
     }
 
-    // ── 3. ACELERACIÓN (curva dinámica) ───────────────────────────────────
+    // ── 3. ACELERACIÓN (curva ease-out) ───────────────────────────────────
     const isTurboActive = InputState.turbo && InputState.forward
     const speedRatio   = Math.abs(mutableKart.currentSpeed) / mutableKart.maxSpeed
-    let dynamicAccel = mutableKart.acceleration * (1.0 - speedRatio * 0.55)
+
+    // Curva de aceleración: fuerte a baja velocidad, se afloja al acercarse a la
+    // velocidad final (ease-out cuadrático). El piso de 0.12 garantiza que el auto
+    // SIEMPRE llegue al tope (y al sobre-tope de recta) en vez de quedar asintótico.
+    let dynamicAccel = mutableKart.acceleration * Math.max(0.28, 1.0 - 0.55 * speedRatio * speedRatio)
 
     if (isTurboActive) {
       dynamicAccel *= 1.8
+    }
+
+    // ── Overdrive de recta ─────────────────────────────────────────────────
+    // Yendo derecho (sin doblar), a fondo y ya cerca del tope, se acumula un
+    // bonus que sube un poco la velocidad final. Se pierde rápido al doblar/soltar.
+    const goingStraight = InputState.forward && !mutableKart.isDrifting && Math.abs(currentSteering) < 0.06
+    if (goingStraight && speedRatio > 0.85) {
+      straightOverdrive = Math.min(1.0, straightOverdrive + dt * 0.30)   // ~3.3s hasta el máximo
+    } else {
+      straightOverdrive = Math.max(0.0, straightOverdrive - dt * 1.5)    // se desarma al doblar/soltar
     }
 
     let isAccelerating = false
@@ -739,9 +786,13 @@ export function kartMovementSystem(dt: number) {
       isAccelerating = true
     }
 
+    // Tope normal extendido por el overdrive de recta (hasta +18% de la velocidad final)
+    const STRAIGHT_TOP_BONUS = 0.18
+    const normalCap = mutableKart.maxSpeed * (1.0 + straightOverdrive * STRAIGHT_TOP_BONUS)
+
     const currentMaxCap = mutableKart.boostTime > 0
       ? mutableKart.maxSpeed * 1.65
-      : (isTurboActive ? mutableKart.maxSpeed * 2.1 : mutableKart.maxSpeed)
+      : (isTurboActive ? mutableKart.maxSpeed * 2.1 : normalCap)
 
     const MAX_REVERSE = -(mutableKart.maxSpeed * 0.35)
     if (mutableKart.currentSpeed > currentMaxCap)    mutableKart.currentSpeed = currentMaxCap
@@ -755,6 +806,7 @@ export function kartMovementSystem(dt: number) {
       const q_init = transform.rotation
       const yaw_init = Math.atan2(2 * (q_init.w * q_init.y + q_init.x * q_init.z), 1 - 2 * (q_init.y * q_init.y + q_init.z * q_init.z))
       currentYaw = yaw_init * (180 / Math.PI)
+      velX = 0; velZ = 0; driftKick = 0
     }
 
     const isTurningRaw = InputState.left || InputState.right  // Señal cruda para drift
@@ -766,15 +818,22 @@ export function kartMovementSystem(dt: number) {
       if (!mutableKart.isDrifting) {
         mutableKart.isDrifting     = true
         mutableKart.driftDirection = InputState.right ? 1 : -1
+        // El tren trasero se suelta de golpe hacia afuera de la curva (sentido opuesto al rumbo)
+        driftKick = -mutableKart.driftDirection
       }
       mutableKart.driftTime += dt
 
-      // Rampa suave para la rotación física del drift (tarda 0.6s en llegar al radio máximo)
-      const driftPhysProgression = Math.min(1.0, mutableKart.driftTime / 0.6)
+      // Rampa de la rotación del rumbo (llega al radio máximo en ~0.5s)
+      const driftPhysProgression = Math.min(1.0, mutableKart.driftTime / 0.5)
       const revMod   = mutableKart.currentSpeed < 0 ? -1 : 1
-      currentYaw += mutableKart.driftDirection * mutableKart.turnSpeed * 0.42 * driftPhysProgression * revMod * dt
-      
-      if (!isAccelerating) mutableKart.currentSpeed *= (1 - 1.6 * dt)
+      // Contravolante: volanteando HACIA la curva cierra (gira más), hacia afuera abre el drift.
+      let steerMod = 1.0 + currentSteering * mutableKart.driftDirection * 0.45
+      steerMod = Math.max(0.5, Math.min(1.5, steerMod))
+      currentYaw += mutableKart.driftDirection * mutableKart.turnSpeed * 0.5 * driftPhysProgression * steerMod * revMod * dt
+
+      // Scrub de neumático: el derrape raspa y baja un poco la velocidad (se recupera con el boost)
+      const scrub = isAccelerating ? 0.5 : 1.6
+      mutableKart.currentSpeed *= (1 - scrub * dt)
 
     } else {
       // ── Giro normal con inercia del volante ──────────────────────────────
@@ -808,26 +867,43 @@ export function kartMovementSystem(dt: number) {
     
     transform.rotation = Quaternion.lookRotation(F_aligned, currentGroundNormal)
 
-    // ── 6. MOVIMIENTO ─────────────────────────────────────────────────────
-    const fwd = Vector3.rotate(Vector3.Forward(), transform.rotation)
-    let moveX: number, moveZ: number
+    // ── 6. MOVIMIENTO con DERRAPE REAL (grip lateral) ─────────────────────
+    // El auto apunta a su rumbo (fwd) pero se mueve según el vector velX/velZ.
+    // Cuando el rumbo gira, parte del momentum viejo queda "de costado": ese es
+    // el derrape. El grip decide cuánto persiste: poco en drift (desliza), mucho
+    // en manejo normal (agarra y va donde apunta).
+    const fwd   = Vector3.rotate(Vector3.Forward(), transform.rotation)
+    const right = Vector3.rotate(Vector3.Right(),   transform.rotation)
 
-    if (mutableKart.isDrifting) {
-      const side     = Vector3.rotate(Vector3.Right(), transform.rotation)
-      const blend    = 0.28
-      const driftDir = mutableKart.driftDirection
-      moveX = (fwd.x * (1 - blend) + side.x * driftDir * blend) * mutableKart.currentSpeed * dt
-      moveZ = (fwd.z * (1 - blend) + side.z * driftDir * blend) * mutableKart.currentSpeed * dt
-    } else {
-      moveX = fwd.x * mutableKart.currentSpeed * dt
-      moveZ = fwd.z * mutableKart.currentSpeed * dt
+    // Componente lateral del momentum actual respecto al rumbo nuevo
+    let latSpeed = velX * right.x + velZ * right.z
+
+    // Patada inicial del drift (un frame): suelta el tren trasero hacia afuera
+    if (driftKick !== 0) {
+      latSpeed += driftKick * Math.abs(mutableKart.currentSpeed) * 0.22
+      driftKick = 0
     }
 
-    transform.position.x = Math.max(2, Math.min(942, transform.position.x + moveX))
-    transform.position.z = Math.max(2, Math.min(494, transform.position.z + moveZ))
+    // Grip lateral: drift = bajo (el derrape persiste ~varios frames) · normal = alto
+    const gripRate = mutableKart.isDrifting ? 1.3 : 12.0
+    latSpeed *= Math.max(0, 1 - gripRate * dt)
+
+    // Techo del derrape para no trompear (drift permite más ángulo que el manejo normal)
+    const latCap = Math.abs(mutableKart.currentSpeed) * (mutableKart.isDrifting ? 0.85 : 0.35)
+    if (latSpeed >  latCap) latSpeed =  latCap
+    if (latSpeed < -latCap) latSpeed = -latCap
+
+    // Velocidad real = empuje del motor (adelante) + derrape lateral
+    velX = fwd.x * mutableKart.currentSpeed + right.x * latSpeed
+    velZ = fwd.z * mutableKart.currentSpeed + right.z * latSpeed
+
+    transform.position.x += velX * dt
+    transform.position.z += velZ * dt
 
     // ── 7. GRAVEDAD Y SEGUIMIENTO DE TERRENO ──────────────────────────────
-    const targetY = lastKnownGroundY + 0.05 * scaleMult
+    // Offset por kart (mitad de la altura del modelo) para apoyar las ruedas en el
+    // terreno. Modelos altos (kart10) usan más; sin esto se hunden al manejar.
+    const targetY = lastKnownGroundY + mutableKart.groundOffsetY * scaleMult
     if (isGrounded) {
       if (targetY > transform.position.y) {
         // En subidas, snap instantáneo para evitar atravesar el terreno
@@ -901,8 +977,8 @@ export function kartMovementSystem(dt: number) {
     if (mutableKart.modelEntity) {
       const modelT = Transform.getMutableOrNull(mutableKart.modelEntity as any)
       if (modelT) {
-        // Base -90 en Y porque el .glb viene rotado
-        const q_base = Quaternion.fromEulerDegrees(0, -90, 0)
+        // Base: el .glb viene rotado. -90 para el modelo estándar; configurable por kart.
+        const q_base = Quaternion.fromEulerDegrees(0, mutableKart.modelYawOffset, 0)
         // Slip visual (Yaw)
         const q_slip = Quaternion.fromEulerDegrees(0, slipAngle, 0)
         // Inclinación (Roll) -> Se aplica sobre X en el espacio local

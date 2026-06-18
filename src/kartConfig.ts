@@ -7,6 +7,9 @@ export interface KartConfig {
   spawnPos:     Vector3   // posición de largada en el mundo
   spawnRotY:    number    // rotación Y en grados (todos miran al mismo lado)
   scale?:       number    // multiplicador de escala visual/física (por defecto 1.0)
+  modelYawOffset?: number // giro Y (grados) del modelo para alinear su trompa (default: -90)
+  groundOffsetY?: number  // distancia del origen del modelo al piso a escala 1 (default: 0.5).
+                          // = mitad de la altura del modelo. Modelos altos necesitan más.
   vehicleType?: 'kart' | 'ship'  // 'ship' = modo nave: sin gravedad, E/Q para subir/bajar
 
   // ── Parámetros de manejo individuales (todos opcionales) ──────────────────
@@ -22,7 +25,7 @@ export interface KartConfig {
 
 // ─── Valores por defecto de física ────────────────────────────────────────────
 export const DEFAULT_PHYSICS = {
-  maxSpeed:     32,
+  maxSpeed:     46,   // velocidad final (crucero). El overdrive de recta suma ~18% extra encima.
   acceleration: 20,
   friction:     0.8,
   turnSpeed:    75,
@@ -81,16 +84,16 @@ function kartPos(row: number, col: number): Vector3 {
 // Posiciones fijadas sobre el parking lot real (capturado en Bevy: spawn ~ -187, -20).
 // Fila de 10 vehículos separados 3m sobre el eje X, a Z=-26 (al lado del spawn).
 export const KART_CONFIGS: KartConfig[] = [
-  { id: 1,  modelPath: 'assets/models/kart.glb',  spawnPos: Vector3.create(-200.5, 10.85, -26), spawnRotY: 0.0},
+  { id: 1,  modelPath: 'assets/models/kart.glb',  spawnPos: Vector3.create(-211.2, 8.6, -27.2), spawnRotY: 17.7, scale: 1.90},
   { id: 2,  modelPath: 'assets/models/kart2.glb', spawnPos: Vector3.create(-197.5, 10.85, -26), spawnRotY: 0.0},
-  { id: 3,  modelPath: 'assets/models/kart3.glb', spawnPos: Vector3.create(-194.5, 10.85, -26), spawnRotY: 0.0,
+  { id: 3,  modelPath: 'assets/models/kart3.glb', spawnPos: Vector3.create(-214.4, 10.8, 0.5), spawnRotY: 0.0,
     vehicleType: 'ship',
     maxSpeed: 48, acceleration: 28, friction: 0.55, turnSpeed: 95 },
-  { id: 4,  modelPath: 'assets/models/kart4.glb', spawnPos: Vector3.create(-191.5, 10.85, -26), spawnRotY: 0.0},
-  { id: 5,  modelPath: 'assets/models/kart5.glb', spawnPos: Vector3.create(-188.5, 10.85, -26), spawnRotY: 0.0},
+  { id: 4,  modelPath: 'assets/models/kart4.glb', spawnPos: Vector3.create(-205.6, 9.0, -12.6), spawnRotY: 24.7, scale: 3.85, groundOffsetY: 0.22},
+  { id: 5,  modelPath: 'assets/models/kart5.glb', spawnPos: Vector3.create(-188.5, 10.8, -25.1), spawnRotY: 0.0},
   { id: 6,  modelPath: 'assets/models/kart6.glb', spawnPos: Vector3.create(-185.5, 10.85, -26), spawnRotY: 0.0},
   { id: 7,  modelPath: 'assets/models/kart7.glb', spawnPos: Vector3.create(-182.5, 10.85, -26), spawnRotY: 0.0},
   { id: 8,  modelPath: 'assets/models/kart8.glb', spawnPos: Vector3.create(-179.5, 10.85, -26), spawnRotY: 0.0},
   { id: 9,  modelPath: 'assets/models/kart9.glb', spawnPos: Vector3.create(-176.5, 10.85, -26), spawnRotY: 0.0},
-  { id: 10, modelPath: 'assets/models/kart10.glb',spawnPos: Vector3.create(-173.5, 10.85, -26), spawnRotY: 0.0},
+  { id: 10, modelPath: 'assets/models/kart10.glb',spawnPos: Vector3.create(-198.6, 9.1, 8.1), spawnRotY: 0.0, scale: 1.08, modelYawOffset: -108.3, groundOffsetY: 1.25},
 ]

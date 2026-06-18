@@ -343,7 +343,6 @@ function updateSpawnArea(x, y, z, rx, ry, rz, rw, sx, sy, sz) {
   const content = `import { Vector3 } from '@dcl/sdk/math'
 
 export const SPAWN_POSITION = Vector3.create(${x.toFixed(1)}, ${adjustedY.toFixed(1)}, ${z.toFixed(1)})
-export const SPAWN_PLATFORM = Vector3.create(${x.toFixed(1)}, ${(adjustedY - 0.4).toFixed(1)}, ${z.toFixed(1)})
 export const SPAWN_CAMERA_TARGET = Vector3.create(${(x + fwdX * 5.0).toFixed(1)}, ${adjustedY.toFixed(1)}, ${(z + fwdZ * 5.0).toFixed(1)})
 export const SPAWN_ROTATION_Y = ${yawDeg.toFixed(1)}
 `

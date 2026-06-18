@@ -20,7 +20,7 @@ Un World de Decentraland que funciona como base personal: terreno recorrible en 
 | `src/ui.tsx` | HUD: coordenadas, panel de debug de colisiones, controles, minimapa. |
 | `src/raceState.ts` | Estado global compartido en memoria (posición del vehículo activo, tipo, flags de debug). El nombre es un remanente del diseño de carrera original; hoy es solo estado compartido entre sistemas y UI. |
 | `src/spawnConfig.ts` | Posición/rotación de spawn — generado automáticamente por el editor 3D al mover la caja verde de spawn. |
-| `src/windParticles.ts`, `src/lightsConfig.ts` | Ambientación (partículas mágicas; `lightsConfig.ts` con 208 posiciones de faroles **no está conectado actualmente** — quedó del diseño viejo, revisar si se reactiva o se borra). |
+| `src/windParticles.ts` | Ambientación (partículas mágicas). |
 
 ### Sistema de coordenadas
 
@@ -84,6 +84,5 @@ Se abre una pestaña pidiendo conectar la wallet `nikoalerce.dcl.eth` y firmar (
 
 ## 4. Problemas conocidos / pendientes
 
-- `src/lightsConfig.ts` (208 posiciones de faroles) no se usa en ningún lado — decidir si se reactiva el spawn de luces o se borra.
-- El minimapa en `src/ui.tsx` usa un rango de coordenadas (`TRACK_MIN_X/MAX_X/MIN_Z/MAX_Z`) que corresponde al layout de pista viejo, no a las coordenadas locales actuales del terreno — hoy el punto del minimapa queda siempre clampeado.
+- El minimapa en `src/ui.tsx` ha sido calibrado para usar las nuevas coordenadas locales desplazadas por el cambio de base del World.
 - Bugs del editor 3D: ver sección 2.

@@ -565,11 +565,11 @@ async function performUndo() {
       const nb = new THREE.Box3().setFromObject(root)
       loaded[basename].bbox.copy(nb)
       bboxHelper.box.copy(nb)
-      
+
       ent.position = { x: saved.position.x, y: saved.position.y, z: saved.position.z }
       ent.rotation = { x: saved.quaternion.x, y: saved.quaternion.y, z: saved.quaternion.z, w: saved.quaternion.w }
       ent.scale = { x: saved.scale.x, y: saved.scale.y, z: saved.scale.z }
-      
+
       updates.push({
         varName: ent.varName,
         x: parseFloat(saved.position.x.toFixed(2)),
@@ -721,34 +721,52 @@ async function loadModel(filename) {
   try {
     await new Promise((res, rej) => {
       gltfLoader.load(`${API}/api/model/${filename}`, gltf => {
-        const root = gltf.scene
-        root.traverse(n => { if (n.isMesh) { n.castShadow=true; n.receiveShadow=true } })
+        // Bevy/DCL renderiza la geometría de los GLB ESPEJADA EN X respecto a cómo
+        // la carga Three.js. Verificado comparando contra el cliente Bevy real:
+        // con este espejo (scale.x=-1) los karts caen EXACTO sobre el parking lot,
+        // con sus líneas de estacionamiento, igual que en Bevy. (No es flip de Z.)
+        // Las POSICIONES de entidad quedan LITERALES — el espejo va SOLO en la
+        // geometría, dentro de flipGroup, sin afectar la posición que se guarda.
+        const flipGroup = new THREE.Group()
+        flipGroup.scale.x = -1
+        gltf.scene.traverse(n => {
+          if (n.isMesh) {
+            n.castShadow = true
+            n.receiveShadow = true
+            // El espejo invierte el winding de los polígonos; DoubleSide evita que
+            // la malla se vea negra/transparente por backface culling.
+            const mats = Array.isArray(n.material) ? n.material : (n.material ? [n.material] : [])
+            mats.forEach(m => { m.side = THREE.DoubleSide })
+          }
+        })
+        flipGroup.add(gltf.scene)
 
-        // Match exact filename in ents list
+        const entityGroup = new THREE.Group()
+        entityGroup.add(flipGroup)
+
         const entIdx = ents.findIndex(e => {
           const entFilename = e.src.split('/').pop()
           return entFilename === filename
         })
-        
-        console.log(`[EDITOR] Cargando ${filename}. entIdx en ents:`, entIdx);
+
         if (entIdx !== -1) {
           const ent = ents[entIdx]
-          console.log(`[EDITOR] Aplicando transform de entidad para ${filename}:`, JSON.stringify(ent.position));
-          root.position.set(ent.position.x, ent.position.y, ent.position.z)
+          // Posición LITERAL — sin negar. Coincide con kartConfig.ts / index.ts / runtime.
+          entityGroup.position.set(ent.position.x, ent.position.y, ent.position.z)
           if (ent.rotation) {
-            root.quaternion.set(ent.rotation.x, ent.rotation.y, ent.rotation.z, ent.rotation.w)
+            entityGroup.quaternion.set(ent.rotation.x, ent.rotation.y, ent.rotation.z, ent.rotation.w)
           }
           if (ent.scale) {
-            root.scale.set(ent.scale.x, ent.scale.y, ent.scale.z)
+            entityGroup.scale.set(ent.scale.x, ent.scale.y, ent.scale.z)
           }
-          root.userData = {
+          entityGroup.userData = {
             isEntity: true,
             entityIndex: entIdx,
             varName: ent.varName,
             filename: filename
           }
         } else {
-          root.userData = { filename }
+          entityGroup.userData = { filename }
           if (ents.length > 0) {
             const cx = ents.reduce((s,e) => s+e.position.x, 0) / ents.length
             const cy = ents.reduce((s,e) => s+e.position.y, 0) / ents.length
@@ -756,10 +774,11 @@ async function loadModel(filename) {
             const noEntIdx = Object.keys(loaded).length
             const col = noEntIdx % 5
             const row = Math.floor(noEntIdx / 5)
-            root.position.set(cx + (col-2)*5, cy, cz + (row)*5 + 10)
+            entityGroup.position.set(cx + (col-2)*5, cy, cz + (row)*5 + 10)
           }
         }
 
+        const root = entityGroup
         scene.add(root)
         const bbox = new THREE.Box3().setFromObject(root)
         const bboxHelper = new THREE.Box3Helper(bbox, new THREE.Color(0x7c3aed))
@@ -936,7 +955,7 @@ function updateGizmoPositionsUI() {
       if (ex) ex.value = worldPos.x.toFixed(1)
       if (ey) ey.value = worldPos.y.toFixed(1)
       if (ez) ez.value = worldPos.z.toFixed(1)
-      
+
       ents[entIdx].position = { x: parseFloat(worldPos.x.toFixed(1)), y: parseFloat(worldPos.y.toFixed(1)), z: parseFloat(worldPos.z.toFixed(1)) }
     }
     
@@ -967,7 +986,7 @@ async function saveSelectedPositions() {
         varName: ent.varName,
         x: parseFloat(worldPos.x.toFixed(2)),
         y: parseFloat(worldPos.y.toFixed(2)),
-        z: parseFloat(worldPos.z.toFixed(2)),
+        z: parseFloat(worldPos.z.toFixed(2)),  // Posición literal — coincide con archivos/runtime
         rx: parseFloat(worldRot.x.toFixed(4)),
         ry: parseFloat(worldRot.y.toFixed(4)),
         rz: parseFloat(worldRot.z.toFixed(4)),
