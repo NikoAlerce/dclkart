@@ -26,9 +26,16 @@ HANDOFF_DEV
 scratch
 temp
 assets/models/trees.glb
+*.bak
+*.presplit
+*.waterbak
+tools
+*.py
+__pycache__
 scene_backup.json
 glb-editor.html
 glb-inspector.html
 glb-editor-server.js
 glb_nodes.txt
 kartSystem_history.txt
+assets/models/paintballspawn*.glb

@@ -1,0 +1,57 @@
+import { Schemas, engine } from '@dcl/sdk/ecs'
+
+export const Spinner = engine.defineComponent('spinner', { speed: Schemas.Number })
+export const Cube    = engine.defineComponent('cube-id', {})
+
+export const KartData = engine.defineComponent('KartData', {
+  // ── Física base ───────────────────────────────────────────────────────────
+  currentSpeed:      Schemas.Float,
+  maxSpeed:          Schemas.Float,
+  acceleration:      Schemas.Float,
+  friction:          Schemas.Float,
+  turnSpeed:         Schemas.Float,
+  isOccupied:        Schemas.Boolean,
+  // ── Sistema de drift ─────────────────────────────────────────────────────
+  isDrifting:        Schemas.Boolean,
+  driftTime:         Schemas.Float,
+  driftDirection:    Schemas.Float,
+  boostTime:         Schemas.Float,
+  // ── Checkpoint de seguridad (respawn) ────────────────────────────────────
+  lastSafeX:         Schemas.Float,
+  lastSafeY:         Schemas.Float,
+  lastSafeZ:         Schemas.Float,
+  lastSafeRotY:      Schemas.Float,
+  // ── Entidades hijas (solo locales, no se sincronizan) ─────────────────────
+  pilotEntity:        Schemas.Optional(Schemas.Entity),
+  cameraPivotEntity:  Schemas.Optional(Schemas.Entity),
+  modelEntity:        Schemas.Optional(Schemas.Entity),
+  floorSensorEntity:  Schemas.Optional(Schemas.Entity),
+  wallSensorEntity:   Schemas.Optional(Schemas.Entity),
+  wallSensorLeftEntity:  Schemas.Optional(Schemas.Entity),
+  wallSensorRightEntity: Schemas.Optional(Schemas.Entity),
+  sparkEntity:        Schemas.Optional(Schemas.Entity),
+  hideAreaEntity:     Schemas.Optional(Schemas.Entity),
+  scale:              Schemas.Float,
+  vehicleType:        Schemas.String,   // 'kart' | 'ship'
+  shipVertSpeed:      Schemas.Float,    // velocidad vertical actual en modo nave
+  // Giro Y (grados) que se aplica al MODELO para alinear su trompa con el rumbo.
+  // El modelo estándar usa -90; un GLB autorado en otro eje necesita otro valor.
+  modelYawOffset:     Schemas.Float,
+  // Distancia (a escala 1) del origen del modelo al piso → se multiplica por scale
+  // para apoyar el kart sobre el terreno al manejar. Modelos altos necesitan más.
+  groundOffsetY:      Schemas.Float
+})
+
+// ─── KartOwner: quién está manejando este kart (sincronizado en red) ──────────
+// ownerId = '' → kart libre
+// ownerId = address del jugador → kart ocupado por ese jugador
+export const KartOwner = engine.defineComponent('KartOwner', {
+  ownerId: Schemas.String
+})
+
+// ─── TurboParticle: Partículas personalizadas de escape del turbo ────────────
+export const TurboParticle = engine.defineComponent('TurboParticle', {
+  velocity: Schemas.Vector3,
+  lifeTime: Schemas.Float,
+  maxLife:  Schemas.Float
+})

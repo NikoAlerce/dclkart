@@ -338,12 +338,28 @@ function updateSpawnArea(x, y, z, rx, ry, rz, rw, sx, sy, sz) {
 
   fs.writeFileSync(SCENE_JSON, JSON.stringify(scene, null, 2), 'utf8')
 
-  // Also update src/spawnConfig.ts so index.ts gets the live coordinates and rotation target
+  // Also update src/spawnConfig.ts so index.ts gets the live coordinates and rotation target.
+  // IMPORTANTE: preservamos WORLD_Y_OFFSET (lo importa todo el proyecto) y lo aplicamos al
+  // spawn. El editor trabaja en coords "a nivel piso"; el offset eleva todo en runtime.
   const spawnConfigPath = path.join(__dirname, 'src', 'spawnConfig.ts')
+  let yOffset = 50
+  try {
+    const prev = fs.readFileSync(spawnConfigPath, 'utf8')
+    const offM = prev.match(/WORLD_Y_OFFSET\s*=\s*(-?\d+(?:\.\d+)?)/)
+    if (offM) yOffset = parseFloat(offM[1])
+  } catch (e) {}
+  const camX = (x + fwdX * 5.0).toFixed(1)
+  const camZ = (z + fwdZ * 5.0).toFixed(1)
   const content = `import { Vector3 } from '@dcl/sdk/math'
 
-export const SPAWN_POSITION = Vector3.create(${x.toFixed(1)}, ${adjustedY.toFixed(1)}, ${z.toFixed(1)})
-export const SPAWN_CAMERA_TARGET = Vector3.create(${(x + fwdX * 5.0).toFixed(1)}, ${adjustedY.toFixed(1)}, ${(z + fwdZ * 5.0).toFixed(1)})
+// ─── Offset global de altura ──────────────────────────────────────────────────
+// Toda la escena (track, karts, monstruo, spawn) se eleva esta cantidad en Y para
+// quedar POR ENCIMA del terreno procedural de Decentraland (que no se puede apagar).
+// Cambiá SOLO este número para subir/bajar todo el mundo de golpe.
+export const WORLD_Y_OFFSET = ${yOffset}
+
+export const SPAWN_POSITION = Vector3.create(${x.toFixed(1)}, ${adjustedY.toFixed(1)} + WORLD_Y_OFFSET, ${z.toFixed(1)})
+export const SPAWN_CAMERA_TARGET = Vector3.create(${camX}, ${adjustedY.toFixed(1)} + WORLD_Y_OFFSET, ${camZ})
 export const SPAWN_ROTATION_Y = ${yawDeg.toFixed(1)}
 `
   fs.writeFileSync(spawnConfigPath, content, 'utf8')

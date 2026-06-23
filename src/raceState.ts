@@ -8,6 +8,7 @@ export const RaceState = {
   kartPositionZ: 0,
   vehicleType: 'kart',
   kartSpeedRatio: 0,
+  justExitedKartTimer: 0,  // cooldown tras bajarse del kart (evita re-subir al toque)
 
   // Coordenadas de la pista para diagnóstico en UI
   trackX: 0,

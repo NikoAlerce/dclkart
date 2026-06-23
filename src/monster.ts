@@ -1,7 +1,7 @@
 import {
   engine, Transform, GltfContainer, Animator, ColliderLayer, MeshCollider,
   Raycast, RaycastResult, RaycastQueryType, PlayerIdentityData,
-  InputAction, pointerEventsSystem
+  InputAction, pointerEventsSystem, Entity
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
 import { movePlayerTo } from '~system/RestrictedActions'
@@ -52,7 +52,7 @@ function angleDiff(from: number, to: number): number {
   return ((to - from + 540) % 360) - 180
 }
 
-export function setupMonster() {
+export function setupMonster(_arbolesEntity?: Entity, _screenVideo?: Entity) {
   const monster = engine.addEntity()
   // Sin collider de malla: sobre una malla ANIMADA da colisiones erráticas (pose de reposo,
   // 58k tris). La colisión para pararse encima la da la caja del lomo (abajo).

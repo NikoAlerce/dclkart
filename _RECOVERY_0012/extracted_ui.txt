@@ -1,0 +1,39 @@
+Created At: 2026-06-22T13:52:23Z
+Completed At: 2026-06-22T13:52:23Z
+File Path: `file:///c:/niko/escritorio/mariokart2/src/ui.tsx`
+Total Lines: 1178
+Total Bytes: 60955
+Showing lines 1100 to 1130
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+1100: 
+1101:       {/* ── BOTTOM RIGHT: CUSTOM MINIMAP ── */}
+1102:       {(() => {
+1103:         // ── Bordes en coords world XZ = ventana exacta de images/minimap.png ──
+1104:         const TRACK_MIN_X = -466
+1105:         const TRACK_MAX_X = 192
+1106:         const TRACK_MIN_Z = -300
+1107:         const TRACK_MAX_Z = 358
+1108: 
+1109:         // Posición a mostrar: el KART si vas manejando; si no, el AVATAR a pie.
+1110:         const wx = RaceState.isOccupied ? RaceState.kartPositionX : (playerTransform ? playerTransform.position.x : TRACK_MIN_X)
+1111:         const wz = RaceState.isOccupied ? RaceState.kartPositionZ : (playerTransform ? playerTransform.position.z : TRACK_MIN_Z)
+1112:         const pctX = Math.max(0, Math.min(100, ((wx - TRACK_MIN_X) / (TRACK_MAX_X - TRACK_MIN_X)) * 100))
+1113:         const pctZ = Math.max(0, Math.min(100, ((wz - TRACK_MIN_Z) / (TRACK_MAX_Z - TRACK_MIN_Z)) * 100))
+1114: 
+1115:         return (
+1116:           <UiEntity
+1117:             uiTransform={{
+1118:               positionType: 'absolute',
+1119:               position: { bottom: 32, right: 32 },
+1120:               width: 320, height: 320,
+1121:               flexDirection: 'column'
+1122:             }}
+1123:             uiBackground={{ textureMode: 'stretch', texture: { src: 'images/minimap.png' } }}
+1124:           >
+1125:             {/* Borde exterior */}
+1126:             <UiEntity uiTransform={{ width: '100%', height: 2, positionType: 'absolute', position: { top: 0 } }}    uiBackground={{ color: Color4.create(1, 1, 1, 0.5) }} />
+1127:             <UiEntity uiTransform={{ width: '100%', height: 2, positionType: 'absolute', position: { bottom: 0 } }} uiBackground={{ color: Color4.create(1, 1, 1, 0.5) }} />
+1128:             <UiEntity uiTransform={{ width: 2, height: '100%', positionType: 'absolute', position: { left: 0 } }}   uiBackground={{ color: Color4.create(1, 1, 1, 0.5) }} />
+1129:             <UiEntity uiTransform={{ width: 2, height: '100%', positionType: 'absolute', position: { right: 0 } }}  uiBackground={{ color: Color4.create(1, 1, 1, 0.5) }} />
+1130: 
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

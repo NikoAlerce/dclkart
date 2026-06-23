@@ -1,0 +1,31 @@
+Created At: 2026-06-23T00:27:46Z
+Completed At: 2026-06-23T00:27:46Z
+File Path: `file:///c:/niko/escritorio/mariokart2/tools/fix_doublesided.mjs`
+Total Lines: 23
+Total Bytes: 685
+Showing lines 1 to 23
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+1: // Setea doubleSided=true en TODOS los materiales de un GLB.
+2: // Uso: node tools/fix_doublesided.mjs assets/models/track.glb
+3: 
+4: import { NodeIO } from '@gltf-transform/core'
+5: import { ALL_EXTENSIONS } from '@gltf-transform/extensions'
+6: 
+7: const [,, src] = process.argv
+8: if (!src) { console.error('Usage: node fix_doublesided.mjs <file.glb>'); process.exit(1) }
+9: 
+10: const io = new NodeIO().registerExtensions(ALL_EXTENSIONS)
+11: const doc = await io.read(src)
+12: 
+13: let count = 0
+14: for (const mat of doc.getRoot().listMaterials()) {
+15:   if (!mat.getDoubleSided()) {
+16:     mat.setDoubleSided(true)
+17:     count++
+18:   }
+19: }
+20: 
+21: await io.write(src, doc)
+22: console.log(`✅  ${count} materiales → doubleSided=true  (${src})`)
+23: 
+The above content shows the entire, complete file contents of the requested file.
