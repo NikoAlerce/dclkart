@@ -77,14 +77,19 @@ const uiComponent = () => {
         const zmin = pb ? 245 : -300, zmax = pb ? 585 : 358
         const wx = RaceState.isOccupied ? RaceState.kartPositionX : (playerTransform ? playerTransform.position.x : xmin)
         const wz = RaceState.isOccupied ? RaceState.kartPositionZ : (playerTransform ? playerTransform.position.z : zmin)
-        const W = 168
+        const W = 240
         const dotX = Math.max(0, Math.min(W, ((wx - xmin) / (xmax - xmin)) * W))
         const dotY = Math.max(0, Math.min(W, ((zmax - wz) / (zmax - zmin)) * W)) // z alto = arriba
+        const dotCol = pb ? Color4.create(0.2, 1, 0.4, 1) : Color4.create(1, 0.15, 0.1, 1)
         return (
-          <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 32, right: 32 }, width: W, height: W }}
+          <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 24, right: 24 }, width: W, height: W }}
             uiBackground={{ textureMode: 'stretch', texture: { src: img } }}>
-            <UiEntity uiTransform={{ positionType: 'absolute', position: { left: dotX, top: dotY }, width: 10, height: 10, margin: { left: -5, top: -5 } }}
-              uiBackground={{ color: pb ? Color4.create(0.3, 1, 0.5, 1) : Color4.create(1, 0.2, 0.1, 1) }} />
+            {/* aro blanco de contraste */}
+            <UiEntity uiTransform={{ positionType: 'absolute', position: { left: dotX, top: dotY }, width: 20, height: 20, margin: { left: -10, top: -10 } }}
+              uiBackground={{ color: Color4.create(1, 1, 1, 0.9) }} />
+            {/* punto del jugador */}
+            <UiEntity uiTransform={{ positionType: 'absolute', position: { left: dotX, top: dotY }, width: 12, height: 12, margin: { left: -6, top: -6 } }}
+              uiBackground={{ color: dotCol }} />
           </UiEntity>
         )
       })()}
@@ -313,14 +318,14 @@ const uiComponent = () => {
 
       {/* ══════════ ADMIN: REPRODUCTOR WINAMP (solo owner) — derecha, lejos del chat ══════════ */}
       {isOwner && (
-        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 200, right: 16 }, width: 70, height: 30, justifyContent: 'center', alignItems: 'center' }}
-          uiBackground={{ color: Color4.create(0.1, 0.12, 0.18, 0.95) }}
+        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 130, left: 16 }, width: 150, height: 38, justifyContent: 'center', alignItems: 'center' }}
+          uiBackground={{ color: adminOpen ? Color4.create(0.2, 0.45, 0.35, 1) : Color4.create(0.15, 0.17, 0.26, 0.96) }}
           onMouseDown={() => { adminOpen = !adminOpen }}>
-          <Label value={adminOpen ? 'DJ ▼' : 'DJ ♪'} fontSize={12} color={Color4.create(0.4, 1, 0.6, 1)} />
+          <Label value={adminOpen ? '♪ PLAYLIST  ▼' : '♪ PLAYLIST  ►'} fontSize={13} color={Color4.create(0.45, 1, 0.65, 1)} />
         </UiEntity>
       )}
       {isOwner && adminOpen && (
-        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 236, right: 16 }, width: 300, height: 352, flexDirection: 'column', padding: 8 }}
+        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 172, left: 16 }, width: 300, height: 352, flexDirection: 'column', padding: 8 }}
           uiBackground={{ color: Color4.create(0.04, 0.05, 0.07, 0.97) }}>
           {/* Barra de título estilo Winamp */}
           <UiEntity uiTransform={{ width: '100%', height: 22, justifyContent: 'center', alignItems: 'center' }} uiBackground={{ color: Color4.create(0.13, 0.17, 0.32, 1) }}>
