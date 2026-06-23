@@ -69,7 +69,7 @@ const uiComponent = () => {
           )}
         </UiEntity>
       )}
-      {(RaceState.isOccupied || ps.inGame) && (() => {
+      {(() => {
         const pb = ps.inGame
         const img = pb ? 'images/paintball_minimap.png' : 'images/minimap.png'
         // Ventanas world-XZ con las que se generaron las imágenes (make_*minimap.py).
@@ -311,59 +311,59 @@ const uiComponent = () => {
         </UiEntity>
       )}
 
-      {/* ══════════ ADMIN: PLAYLIST / PANTALLA (solo owner) ══════════ */}
+      {/* ══════════ ADMIN: REPRODUCTOR WINAMP (solo owner) — derecha, lejos del chat ══════════ */}
       {isOwner && (
-        <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 200, left: 16 }, width: 56, height: 32, justifyContent: 'center', alignItems: 'center' }}
-          uiBackground={{ color: Color4.create(0.1, 0.1, 0.16, 0.9) }}
+        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 200, right: 16 }, width: 70, height: 30, justifyContent: 'center', alignItems: 'center' }}
+          uiBackground={{ color: Color4.create(0.1, 0.12, 0.18, 0.95) }}
           onMouseDown={() => { adminOpen = !adminOpen }}>
-          <Label value="📻" fontSize={16} color={Color4.White()} />
+          <Label value={adminOpen ? 'DJ ▼' : 'DJ ♪'} fontSize={12} color={Color4.create(0.4, 1, 0.6, 1)} />
         </UiEntity>
       )}
       {isOwner && adminOpen && (
-        <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 240, left: 16 }, width: 320, height: 360, flexDirection: 'column', padding: 10 }}
-          uiBackground={{ color: Color4.create(0.05, 0.05, 0.08, 0.96) }}>
-          <Label value="📻 SCREEN ADMIN" fontSize={13} color={Color4.create(1, 0.85, 0.2, 1)} uiTransform={{ width: '100%', height: 20 }} />
-
-          {/* Selector de playlist (librería) */}
-          <Label value="Playlist:" fontSize={10} color={Color4.create(0.6, 0.7, 0.8, 1)} uiTransform={{ width: '100%', height: 16, margin: { top: 4 } }} />
+        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 236, right: 16 }, width: 300, height: 352, flexDirection: 'column', padding: 8 }}
+          uiBackground={{ color: Color4.create(0.04, 0.05, 0.07, 0.97) }}>
+          {/* Barra de título estilo Winamp */}
+          <UiEntity uiTransform={{ width: '100%', height: 22, justifyContent: 'center', alignItems: 'center' }} uiBackground={{ color: Color4.create(0.13, 0.17, 0.32, 1) }}>
+            <Label value="W I N A M P  —  SCREEN" fontSize={10} color={Color4.create(0.55, 0.8, 1, 1)} />
+          </UiEntity>
+          {/* Display LCD: track actual */}
+          <UiEntity uiTransform={{ width: '100%', height: 26, justifyContent: 'flex-start', alignItems: 'center', padding: { left: 6 }, margin: { top: 4, bottom: 4 } }} uiBackground={{ color: Color4.create(0, 0.06, 0.02, 1) }}>
+            <Label value={`▶ ${Playlist.tracks[Playlist.currentIndex]?.name || '—'}`} fontSize={10} color={Color4.create(0.3, 1, 0.45, 1)} uiTransform={{ width: '96%', height: 18 }} />
+          </UiEntity>
+          {/* Transporte (glyphs que SÍ renderizan en DCL) */}
+          <UiEntity uiTransform={{ width: '100%', height: 34, flexDirection: 'row', justifyContent: 'space-between' }}>
+            {[
+              { l: '◀◀', on: false, f: () => previousTrack() },
+              { l: Playlist.paused ? '▶' : 'II', on: !Playlist.paused, f: () => togglePause() },
+              { l: '▶▶', on: false, f: () => requestSkip() },
+              { l: 'SHUF', on: Playlist.shuffle, f: () => toggleShuffle() },
+              { l: 'MUTE', on: Playlist.muted, f: () => toggleMute() }
+            ].map((b, i) => (
+              <UiEntity key={i} uiTransform={{ width: 54, height: 32, justifyContent: 'center', alignItems: 'center' }}
+                uiBackground={{ color: b.on ? Color4.create(0.2, 0.55, 0.35, 1) : Color4.create(0.14, 0.15, 0.2, 1) }}
+                onMouseDown={b.f}>
+                <Label value={b.l} fontSize={b.l.length > 2 ? 9 : 15} color={Color4.create(0.85, 1, 0.9, 1)} />
+              </UiEntity>
+            ))}
+          </UiEntity>
+          {/* Selector de playlist (sin emojis → se leen) */}
+          <Label value="PLAYLIST:" fontSize={9} color={Color4.create(0.5, 0.7, 0.9, 1)} uiTransform={{ width: '100%', height: 14, margin: { top: 8 } }} />
           {PlaylistLibrary.map((lib, idx) => (
-            <UiEntity key={idx} uiTransform={{ width: '100%', height: 28, justifyContent: 'center', alignItems: 'center', margin: { bottom: 4 } }}
-              uiBackground={{ color: selectedLibraryIdx === idx ? Color4.create(0.2, 0.5, 0.35, 1) : Color4.create(0.13, 0.13, 0.18, 1) }}
-              onMouseDown={() => { selectedLibraryIdx = idx; if (selectLibrary(idx)) adminMsg = `Cargada: ${lib.name}` }}>
-              <Label value={lib.name} fontSize={9} color={Color4.White()} />
+            <UiEntity key={idx} uiTransform={{ width: '100%', height: 24, justifyContent: 'center', alignItems: 'center', margin: { bottom: 3 } }}
+              uiBackground={{ color: selectedLibraryIdx === idx ? Color4.create(0.2, 0.5, 0.35, 1) : Color4.create(0.12, 0.13, 0.18, 1) }}
+              onMouseDown={() => { selectedLibraryIdx = idx; if (selectLibrary(idx)) adminMsg = 'Cargada' }}>
+              <Label value={lib.name.replace(/[^\x00-\x7F]/g, '').trim()} fontSize={8} color={Color4.White()} />
             </UiEntity>
           ))}
-
-          {/* Transporte */}
-          <UiEntity uiTransform={{ width: '100%', height: 36, flexDirection: 'row', justifyContent: 'space-between', margin: { top: 6 } }}>
-            {[
-              { l: '⏮', f: () => previousTrack() },
-              { l: Playlist.paused ? '▶' : '⏸', f: () => togglePause() },
-              { l: '⏭', f: () => requestSkip() },
-              { l: Playlist.shuffle ? '🔀' : '➡', f: () => toggleShuffle() },
-              { l: Playlist.muted ? '🔇' : '🔊', f: () => toggleMute() }
-            ].map((b, i) => (
-              <UiEntity key={i} uiTransform={{ width: 56, height: 34, justifyContent: 'center', alignItems: 'center' }} uiBackground={{ color: Color4.create(0.15, 0.15, 0.2, 1) }}
-                onMouseDown={b.f}>
-                <Label value={b.l} fontSize={14} color={Color4.White()} />
-              </UiEntity>
-            ))}
-          </UiEntity>
-
-          {/* Now playing */}
-          <Label value={`▶ ${Playlist.tracks[Playlist.currentIndex]?.name || '—'}`} fontSize={10} color={Color4.create(0.4, 1, 0.6, 1)} uiTransform={{ width: '100%', height: 18, margin: { top: 6 } }} />
-
-          {/* Lista de tracks (primeros 8, click = reproducir) */}
-          <UiEntity uiTransform={{ width: '100%', height: 130, flexDirection: 'column', margin: { top: 4 } }}>
+          {/* Lista de tracks (click = reproducir) */}
+          <UiEntity uiTransform={{ width: '100%', height: 116, flexDirection: 'column', margin: { top: 4 } }}>
             {Playlist.tracks.slice(0, 8).map((tr, i) => (
-              <UiEntity key={i} uiTransform={{ width: '100%', height: 15 }} onMouseDown={() => { jumpToTrack(i) }}>
-                <Label value={`${i === Playlist.currentIndex ? '● ' : ''}${tr.name}`} fontSize={9}
-                  color={i === Playlist.currentIndex ? Color4.create(1, 0.85, 0.2, 1) : Color4.create(0.8, 0.8, 0.85, 1)} uiTransform={{ width: '100%', height: 14 }} />
+              <UiEntity key={i} uiTransform={{ width: '100%', height: 14 }} onMouseDown={() => { jumpToTrack(i) }}>
+                <Label value={`${i === Playlist.currentIndex ? '▶ ' : '   '}${tr.name}`} fontSize={8}
+                  color={i === Playlist.currentIndex ? Color4.create(0.3, 1, 0.45, 1) : Color4.create(0.75, 0.78, 0.82, 1)} uiTransform={{ width: '100%', height: 13 }} />
               </UiEntity>
             ))}
           </UiEntity>
-
-          {adminMsg !== '' && <Label value={adminMsg} fontSize={9} color={Color4.create(0.5, 0.9, 0.6, 1)} uiTransform={{ width: '100%', height: 16 }} />}
         </UiEntity>
       )}
 
