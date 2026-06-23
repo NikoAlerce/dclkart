@@ -69,12 +69,25 @@ const uiComponent = () => {
           )}
         </UiEntity>
       )}
-      {RaceState.isOccupied && (
-        <UiEntity
-          uiTransform={{ positionType: 'absolute', position: { bottom: 32, right: 32 }, width: 240, height: 140 }}
-          uiBackground={{ textureMode: 'stretch', texture: { src: 'images/minimap.png' } }}
-        />
-      )}
+      {(RaceState.isOccupied || ps.inGame) && (() => {
+        const pb = ps.inGame
+        const img = pb ? 'images/paintball_minimap.png' : 'images/minimap.png'
+        // Ventanas world-XZ con las que se generaron las imágenes (make_*minimap.py).
+        const xmin = pb ? -170 : -466, xmax = pb ? 170 : 192
+        const zmin = pb ? 245 : -300, zmax = pb ? 585 : 358
+        const wx = RaceState.isOccupied ? RaceState.kartPositionX : (playerTransform ? playerTransform.position.x : xmin)
+        const wz = RaceState.isOccupied ? RaceState.kartPositionZ : (playerTransform ? playerTransform.position.z : zmin)
+        const W = 168
+        const dotX = Math.max(0, Math.min(W, ((wx - xmin) / (xmax - xmin)) * W))
+        const dotY = Math.max(0, Math.min(W, ((zmax - wz) / (zmax - zmin)) * W)) // z alto = arriba
+        return (
+          <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 32, right: 32 }, width: W, height: W }}
+            uiBackground={{ textureMode: 'stretch', texture: { src: img } }}>
+            <UiEntity uiTransform={{ positionType: 'absolute', position: { left: dotX, top: dotY }, width: 10, height: 10, margin: { left: -5, top: -5 } }}
+              uiBackground={{ color: pb ? Color4.create(0.3, 1, 0.5, 1) : Color4.create(1, 0.2, 0.1, 1) }} />
+          </UiEntity>
+        )
+      })()}
 
       {/* ══════════ DAÑO: flash a pantalla completa ══════════ */}
       {ps.inGame && ps.shotFlash && (
