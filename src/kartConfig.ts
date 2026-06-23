@@ -81,19 +81,22 @@ function kartPos(row: number, col: number): Vector3 {
 // │    friction: 0.95 },      ← se frena más rápido                           │
 // └─────────────────────────────────────────────────────────────────────────────┘
 
-// Posiciones fijadas sobre el parking lot real (capturado en Bevy: spawn ~ -187, -20).
-// Fila de 10 vehículos separados 3m sobre el eje X, a Z=-26 (al lado del spawn).
+// Posiciones recalibradas al parking lot del track NUEVO. El nodo ParkingLot del GLB
+// (local 112, 3.25, 63.27) resuelve a mundo ≈ (-200, ~63, 101.5) con el X-flip de DCL
+// (mapeo confirmado con el empty del NPC). Los karts NO reciben +offset → su Y debe ser
+// ~el piso real (~63) + un margen para que la física los baje. Grilla 5×2 sobre el lote.
+// ⚠️ A AFINAR VISUALMENTE: si quedan corridos/encimados, ajustar XZ acá o en el editor.
 export const KART_CONFIGS: KartConfig[] = [
-  { id: 1,  modelPath: 'assets/models/kart.glb',  spawnPos: Vector3.create(-211.2, 8.6, -27.2), spawnRotY: 17.7, scale: 1.90},
-  { id: 2,  modelPath: 'assets/models/kart2.glb', spawnPos: Vector3.create(-197.5, 10.85, -26), spawnRotY: 0.0},
-  { id: 3,  modelPath: 'assets/models/kart3.glb', spawnPos: Vector3.create(-214.4, 10.8, 0.5), spawnRotY: 0.0,
+  { id: 1,  modelPath: 'assets/models/kart.glb',  spawnPos: Vector3.create(-209, 65, 98),  spawnRotY: 0.0, scale: 1.90},
+  { id: 2,  modelPath: 'assets/models/kart2.glb', spawnPos: Vector3.create(-205, 65, 98),  spawnRotY: 0.0},
+  { id: 3,  modelPath: 'assets/models/kart3.glb', spawnPos: Vector3.create(-201, 65, 98),  spawnRotY: 0.0,
     vehicleType: 'ship',
     maxSpeed: 48, acceleration: 28, friction: 0.55, turnSpeed: 95 },
-  { id: 4,  modelPath: 'assets/models/kart4.glb', spawnPos: Vector3.create(-205.6, 9.0, -12.6), spawnRotY: 24.7, scale: 3.85, groundOffsetY: 0.22},
-  { id: 5,  modelPath: 'assets/models/kart5.glb', spawnPos: Vector3.create(-188.5, 10.8, -25.1), spawnRotY: 0.0},
-  { id: 6,  modelPath: 'assets/models/kart6.glb', spawnPos: Vector3.create(-185.5, 10.85, -26), spawnRotY: 0.0},
-  { id: 7,  modelPath: 'assets/models/kart7.glb', spawnPos: Vector3.create(-182.5, 10.85, -26), spawnRotY: 0.0},
-  { id: 8,  modelPath: 'assets/models/kart8.glb', spawnPos: Vector3.create(-179.5, 10.85, -26), spawnRotY: 0.0},
-  { id: 9,  modelPath: 'assets/models/kart9.glb', spawnPos: Vector3.create(-176.5, 10.85, -26), spawnRotY: 0.0},
-  { id: 10, modelPath: 'assets/models/kart10.glb',spawnPos: Vector3.create(-198.6, 9.1, 8.1), spawnRotY: 0.0, scale: 1.08, modelYawOffset: -108.3, groundOffsetY: 1.25},
+  { id: 4,  modelPath: 'assets/models/kart4.glb', spawnPos: Vector3.create(-197, 65, 98),  spawnRotY: 0.0, scale: 3.85, groundOffsetY: 0.22},
+  { id: 5,  modelPath: 'assets/models/kart5.glb', spawnPos: Vector3.create(-193, 65, 98),  spawnRotY: 0.0},
+  { id: 6,  modelPath: 'assets/models/kart6.glb', spawnPos: Vector3.create(-209, 65, 104), spawnRotY: 0.0},
+  { id: 7,  modelPath: 'assets/models/kart7.glb', spawnPos: Vector3.create(-205, 65, 104), spawnRotY: 0.0},
+  { id: 8,  modelPath: 'assets/models/kart8.glb', spawnPos: Vector3.create(-201, 65, 104), spawnRotY: 0.0},
+  { id: 9,  modelPath: 'assets/models/kart9.glb', spawnPos: Vector3.create(-197, 65, 104), spawnRotY: 0.0},
+  { id: 10, modelPath: 'assets/models/kart10.glb',spawnPos: Vector3.create(-193, 65, 104), spawnRotY: 0.0, scale: 1.08, modelYawOffset: -108.3, groundOffsetY: 1.25},
 ]

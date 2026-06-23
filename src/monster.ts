@@ -1,11 +1,13 @@
 import {
   engine, Transform, GltfContainer, Animator, ColliderLayer, MeshCollider,
   Raycast, RaycastResult, RaycastQueryType, PlayerIdentityData,
-  InputAction, pointerEventsSystem, Entity
+  InputAction, pointerEventsSystem, Entity, MeshRenderer, Material
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
+import { syncEntity } from '@dcl/sdk/network'
 import { movePlayerTo } from '~system/RestrictedActions'
 import { RaceState } from './raceState'
+import { isHost, SYNC_IDS } from './net'
 
 // ─── Monstruo biomecánico gigante que deambula por el escenario ───────────────
 // Camina a destinos ALEATORIOS por todo el terreno, sigue la altura del piso, ESQUIVA
@@ -52,7 +54,7 @@ function angleDiff(from: number, to: number): number {
   return ((to - from + 540) % 360) - 180
 }
 
-export function setupMonster(_arbolesEntity?: Entity, _screenVideo?: Entity) {
+export function setupMonster(arbolesEntity?: Entity, screenVideo?: Entity) {
   const monster = engine.addEntity()
   // Sin collider de malla: sobre una malla ANIMADA da colisiones erráticas (pose de reposo,
   // 58k tris). La colisión para pararse encima la da la caja del lomo (abajo).
@@ -67,6 +69,24 @@ export function setupMonster(_arbolesEntity?: Entity, _screenVideo?: Entity) {
     scale:    Vector3.create(SCALE, SCALE, SCALE),
     rotation: Quaternion.Identity()
   })
+
+  // Multiplayer: el host simula la IA y propaga el Transform; los demás lo reciben.
+  syncEntity(monster, [Transform.componentId], SYNC_IDS.monster)
+
+  // TV en el lomo mostrando el MISMO stream/playlist que la pantalla principal.
+  // Reusa el VideoPlayer de screenVideo via textura de video (un solo stream, varias
+  // superficies). Así se puede ridear en multiplayer mirando el vivo en su lomo.
+  if (screenVideo !== undefined) {
+    const tv = engine.addEntity()
+    Transform.create(tv, {
+      parent:   monster,
+      position: Vector3.create(BACK_CX, BACK_Y + 2.6, -0.14), // parado sobre la plataforma del lomo
+      rotation: Quaternion.fromEulerDegrees(0, 180, 0),
+      scale:    Vector3.create(3.4, 2.0, 1.0)
+    })
+    MeshRenderer.setPlane(tv)
+    Material.setBasicMaterial(tv, { texture: Material.Texture.Video({ videoPlayerEntity: screenVideo }) })
+  }
 
   // Plataforma sólida sobre el lomo (parented → se mueve/gira con el monstruo).
   const back = engine.addEntity()
@@ -135,6 +155,10 @@ export function setupMonster(_arbolesEntity?: Entity, _screenVideo?: Entity) {
     const t = Transform.getMutableOrNull(monster)
     if (!t) return
 
+    // La IA (caminata/evasión/piso/orientación) corre SOLO en el host; los demás
+    // reciben el Transform por syncEntity. El delta-carry (montar) corre en todos.
+    if (isHost()) {
+
     // ── PISO: mantener el sensor encima y leer el hit más alto (NO el monstruo ni su lomo) ──
     const ft = Transform.getMutableOrNull(floor)
     if (ft) { ft.position.x = t.position.x; ft.position.z = t.position.z; ft.position.y = t.position.y + 80 }
@@ -145,6 +169,7 @@ export function setupMonster(_arbolesEntity?: Entity, _screenVideo?: Entity) {
         if (h.position &&
             h.entityId !== monster &&
             h.entityId !== back &&
+            h.entityId !== arbolesEntity &&
             h.entityId !== engine.PlayerEntity &&
             !PlayerIdentityData.has(h.entityId as any)) {
           if (best === null || h.position.y > best) best = h.position.y
@@ -167,6 +192,7 @@ export function setupMonster(_arbolesEntity?: Entity, _screenVideo?: Entity) {
       for (const h of frontRes.hits) {
         if (h.entityId !== monster &&
             h.entityId !== back &&
+            h.entityId !== arbolesEntity &&
             h.entityId !== engine.PlayerEntity &&
             !PlayerIdentityData.has(h.entityId as any) &&
             h.length != null) {
@@ -218,11 +244,15 @@ export function setupMonster(_arbolesEntity?: Entity, _screenVideo?: Entity) {
     if (t.position.z > ROAM.maxZ) t.position.z = ROAM.maxZ
 
     // ── Orientar el modelo (cara hacia el avance) y pegar los pies al terreno ──
-    const worldYaw = currentYaw + YAW_OFFSET
-    t.rotation   = Quaternion.fromEulerDegrees(0, worldYaw, 0)
+    t.rotation   = Quaternion.fromEulerDegrees(0, currentYaw + YAW_OFFSET, 0)
     t.position.y = groundY + FOOT_OFFSET * SCALE
+    } // ── fin IA (solo host) ──
 
-    // ── LLEVAR AL JUGADOR sobre el lomo (delta-carry, SIN parentar) ───────────
+    // worldYaw del monstruo derivado del Transform actual (rotación solo en Y) → sirve
+    // tanto en el host como en los clientes que reciben la rotación por sync.
+    const worldYaw = 2 * Math.atan2(t.rotation.y, t.rotation.w) * 180 / Math.PI
+
+    // ── LLEVAR AL JUGADOR sobre el lomo (delta-carry — corre en TODOS los clientes) ──
     // Si el jugador está sobre la plataforma, le sumamos el desplazamiento + giro del
     // monstruo de este frame (preservando su propia caminata). Si camina fuera del
     // borde, deja de ser llevado y cae. Sin parenting → sin deformación ni teleports raros.
