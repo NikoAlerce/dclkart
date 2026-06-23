@@ -72,12 +72,13 @@ const uiComponent = () => {
       {(() => {
         const pb = ps.inGame
         const img = pb ? 'images/paintball_minimap.png' : 'images/minimap.png'
-        // Ventanas world-XZ con las que se generaron las imágenes (make_*minimap.py).
-        const xmin = pb ? -170 : -466, xmax = pb ? 170 : 192
-        const zmin = pb ? 245 : -300, zmax = pb ? 585 : 358
+        // Ventanas world-XZ EXACTAS con las que se generaron las imágenes (impreso por
+        // make_*minimap.py). Track: X[-537.9,277.9] Z[-204.6,611.2]. Paintball: -170..170 / 245..585.
+        const xmin = pb ? -170 : -537.9, xmax = pb ? 170 : 277.9
+        const zmin = pb ? 245 : -204.6, zmax = pb ? 585 : 611.2
         const wx = RaceState.isOccupied ? RaceState.kartPositionX : (playerTransform ? playerTransform.position.x : xmin)
         const wz = RaceState.isOccupied ? RaceState.kartPositionZ : (playerTransform ? playerTransform.position.z : zmin)
-        const W = 240
+        const W = 320
         const dotX = Math.max(0, Math.min(W, ((wx - xmin) / (xmax - xmin)) * W))
         const dotY = Math.max(0, Math.min(W, ((zmax - wz) / (zmax - zmin)) * W)) // z alto = arriba
         const dotCol = pb ? Color4.create(0.2, 1, 0.4, 1) : Color4.create(1, 0.15, 0.1, 1)
@@ -318,14 +319,14 @@ const uiComponent = () => {
 
       {/* ══════════ ADMIN: REPRODUCTOR WINAMP (solo owner) — derecha, lejos del chat ══════════ */}
       {isOwner && (
-        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 130, left: 16 }, width: 150, height: 38, justifyContent: 'center', alignItems: 'center' }}
+        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 160, right: 20 }, width: 160, height: 38, justifyContent: 'center', alignItems: 'center' }}
           uiBackground={{ color: adminOpen ? Color4.create(0.2, 0.45, 0.35, 1) : Color4.create(0.15, 0.17, 0.26, 0.96) }}
           onMouseDown={() => { adminOpen = !adminOpen }}>
           <Label value={adminOpen ? '♪ PLAYLIST  ▼' : '♪ PLAYLIST  ►'} fontSize={13} color={Color4.create(0.45, 1, 0.65, 1)} />
         </UiEntity>
       )}
       {isOwner && adminOpen && (
-        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 172, left: 16 }, width: 300, height: 352, flexDirection: 'column', padding: 8 }}
+        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 202, right: 20 }, width: 300, height: 352, flexDirection: 'column', padding: 8 }}
           uiBackground={{ color: Color4.create(0.04, 0.05, 0.07, 0.97) }}>
           {/* Barra de título estilo Winamp */}
           <UiEntity uiTransform={{ width: '100%', height: 22, justifyContent: 'center', alignItems: 'center' }} uiBackground={{ color: Color4.create(0.13, 0.17, 0.32, 1) }}>
