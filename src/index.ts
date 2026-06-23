@@ -359,7 +359,10 @@ export function main() {
     const r = RaycastResult.getOrNull(e)
     if (!r || r.hits.length === 0) return null
     const valid = r.hits
-      .filter(h => h.position && h.entityId !== engine.PlayerEntity)
+      // Ignorar al jugador y cualquier superficie muy por encima del piso del estacionamiento
+      // (ej: la plataforma del lomo del monstruo si justo está pasando por el spawn) → así el
+      // spawn nunca te tira arriba del monstruo.
+      .filter(h => h.position && h.entityId !== engine.PlayerEntity && h.position!.y < SPAWN_POSITION.y + 6)
       .sort((a, b) => b.position!.y - a.position!.y)  // más alto = superficie caminable
     return valid.length > 0 ? valid[0].position!.y : null
   }

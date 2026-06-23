@@ -11,7 +11,8 @@
 import { engine, PlayerIdentityData } from '@dcl/sdk/ecs'
 import { myProfile } from '@dcl/sdk/network'
 
-let myId = ''
+let myId = ''      // identificador para MENSAJERÍA (userId del perfil) — lo usa el paintball
+let myAddr = ''    // address (lowercase) para ELECCIÓN DE HOST — consistente entre clientes
 let hostId = ''
 let scanAccum = 0
 const RESCAN_INTERVAL = 2.0
@@ -35,17 +36,19 @@ export function setupNet() {
 
 function rescan() {
   if (myId === '') myId = myProfile?.userId ?? ''
-  let lowest = myId
-  for (const [entity, idData] of engine.getEntitiesWith(PlayerIdentityData)) {
-    const a = idData.address
+
+  // Elección de host DETERMINÍSTICA y consistente: comparamos a TODOS por su `address`
+  // (incluido yo, vía el PlayerIdentityData de mi PlayerEntity), en minúsculas. Antes se
+  // comparaba mi userId contra el address de los demás → cada cliente podía elegir un host
+  // distinto (dos "hosts" a la vez → el monstruo saltaba de lugar para todos).
+  const me = PlayerIdentityData.getOrNull(engine.PlayerEntity)
+  myAddr = (me?.address || myProfile?.userId || '').toLowerCase()
+
+  let lowest = myAddr
+  for (const [, idData] of engine.getEntitiesWith(PlayerIdentityData)) {
+    const a = (idData.address || '').toLowerCase()
     if (!a || a.startsWith('bot_')) continue // ignorar bots locales del paintball
-    
-    // Para el jugador local, usar myId (userId) en lugar de su address de ethereum,
-    // garantizando coherencia si son distintos en la preview local (ej: cuentas guest).
-    const isMe = entity === engine.PlayerEntity
-    const compareVal = isMe && myId ? myId : a
-    
-    if (lowest === '' || compareVal < lowest) lowest = compareVal
+    if (lowest === '' || a < lowest) lowest = a
   }
   hostId = lowest
 }
@@ -60,7 +63,7 @@ function netSystem(dt: number) {
 
 /** ¿Este cliente es el host que simula los NPCs? (true también si estás solo) */
 export function isHost(): boolean {
-  return myId === '' || hostId === myId
+  return myAddr === '' || hostId === myAddr
 }
 
 export function getMyId(): string {
