@@ -3,6 +3,25 @@
 Contexto: tras el wipe del otro dev, se recuperó casi todo. Esta lista es lo que
 quedó por arreglar/mejorar. Ordenado por prioridad.
 
+## ✅ YA HECHO (sesión 2026-06-23, commits 1078d25 → 92966ca)
+- Commit de todo el rescate (ya nada untracked).
+- Karts recalibrados al parking nuevo (grilla 5×2 — afinar visual si hace falta).
+- Monstruo: ignora árboles (vaga/atraviesa), TV con stream en el lomo, sync multiplayer
+  (host corre IA, cada cliente monta su jugador). Posición/escala de la TV del lomo
+  son estimación → afinar visual.
+- Minimapa: punto de posición en vivo + zoom a la arena en paintball (bounds reales).
+- Playlist Archive completa (20 tracks, recuperados los 6 que faltaban).
+- Botón admin 📻 movido al lado izquierdo (ya no pisa el Admin Toolkit de asset-packs).
+
+## ⏳ FALTA — necesita TU input o feedback visual
+- **Links IPFS**: la 1ª playlist (41 tracks) puede estar recortada → pasame los que falten.
+- **Sonidos**: poné `assets/sounds/shoot.mp3 / impact.mp3 / footstep.mp3` (código listo).
+- **Visual**: confirmar/afinar karts en el parking, TV del lomo, y la TV noventera
+  (alinear el plano de video dentro del modelo, en index.ts).
+- **Panel admin**: falta save/load JSON + add-track (necesitan `Input` de react-ecs).
+
+## Detalle original (referencia) — abajo lo que quedaba antes
+
 ## 0. 🔒 URGENTE — COMMITEAR
 Todo (paintball, UI, 2ª playlist, recuperaciones) está **untracked** en git.
 `git add -A && git commit -m "rescate post-wipe"`. Si no, se puede perder de nuevo.
