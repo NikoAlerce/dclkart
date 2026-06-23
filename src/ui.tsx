@@ -313,14 +313,14 @@ const uiComponent = () => {
 
       {/* ══════════ ADMIN: PLAYLIST / PANTALLA (solo owner) ══════════ */}
       {isOwner && (
-        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 120, right: 16 }, width: 56, height: 32, justifyContent: 'center', alignItems: 'center' }}
+        <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 200, left: 16 }, width: 56, height: 32, justifyContent: 'center', alignItems: 'center' }}
           uiBackground={{ color: Color4.create(0.1, 0.1, 0.16, 0.9) }}
           onMouseDown={() => { adminOpen = !adminOpen }}>
           <Label value="📻" fontSize={16} color={Color4.White()} />
         </UiEntity>
       )}
       {isOwner && adminOpen && (
-        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 158, right: 16 }, width: 320, height: 360, flexDirection: 'column', padding: 10 }}
+        <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 240, left: 16 }, width: 320, height: 360, flexDirection: 'column', padding: 10 }}
           uiBackground={{ color: Color4.create(0.05, 0.05, 0.08, 0.96) }}>
           <Label value="📻 SCREEN ADMIN" fontSize={13} color={Color4.create(1, 0.85, 0.2, 1)} uiTransform={{ width: '100%', height: 20 }} />
 
