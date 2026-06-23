@@ -7,8 +7,15 @@ import { PaintballState } from './paintballState'
 import { startPaintball, joinPaintball, exitPaintball } from './paintball'
 import {
   Playlist, OWNER_ADDRESS, PlaylistLibrary, selectLibrary,
-  requestSkip, previousTrack, togglePause, toggleMute, toggleShuffle, jumpToTrack
+  requestSkip, previousTrack, togglePause, toggleMute, toggleShuffle, jumpToTrack, seekToFraction, seekRelative
 } from './playlist'
+
+// mm:ss para la barra de progreso
+function fmtTime(s: number): string {
+  const t = Math.max(0, Math.floor(s))
+  const m = Math.floor(t / 60), ss = t % 60
+  return `${m}:${ss < 10 ? '0' : ''}${ss}`
+}
 
 export function setupUi() {
   ReactEcsRenderer.setUiRenderer(uiComponent)
@@ -326,7 +333,7 @@ const uiComponent = () => {
         </UiEntity>
       )}
       {isOwner && adminOpen && (
-        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 206, right: 20 }, width: 560, height: 500, flexDirection: 'column', padding: 14 }}
+        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 206, right: 20, bottom: 12 }, width: 560, flexDirection: 'column', padding: 14 }}
           uiBackground={{ color: Color4.create(0.04, 0.05, 0.07, 0.97) }}>
           {/* Barra de título estilo Winamp */}
           <UiEntity uiTransform={{ width: '100%', height: 38, justifyContent: 'center', alignItems: 'center' }} uiBackground={{ color: Color4.create(0.13, 0.17, 0.32, 1) }}>
@@ -352,6 +359,39 @@ const uiComponent = () => {
               </UiEntity>
             ))}
           </UiEntity>
+          {/* Barra de progreso + seek. Segmentos clickeables + botones ±seg. */}
+          {(() => {
+            const dur  = Playlist.duration || 0
+            const cur  = Math.min(Playlist.currentTime || 0, dur)
+            const prog = dur > 0 ? cur / dur : 0
+            const SEG  = 24
+            const seekBtns = [{ l: '-30', d: -30 }, { l: '-10', d: -10 }, { l: '+10', d: 10 }, { l: '+30', d: 30 }]
+            return (
+              <UiEntity uiTransform={{ width: '100%', height: 76, flexDirection: 'column', margin: { top: 10 } }}>
+                {/* barra segmentada (click = saltar a esa posición) */}
+                <UiEntity uiTransform={{ width: '100%', height: 22, flexDirection: 'row' }} uiBackground={{ color: Color4.create(0.10, 0.12, 0.16, 1) }}>
+                  {Array.from({ length: SEG }).map((_, i) => (
+                    <UiEntity key={i} uiTransform={{ flexGrow: 1, height: '100%', margin: { right: 1 } }}
+                      uiBackground={{ color: (i / SEG) < prog ? Color4.create(0.3, 1, 0.45, 1) : Color4.create(0.18, 0.2, 0.25, 1) }}
+                      onMouseDown={() => { if (dur > 0) seekToFraction((i + 0.5) / SEG) }} />
+                  ))}
+                </UiEntity>
+                {/* tiempo + botones de salto fino */}
+                <UiEntity uiTransform={{ width: '100%', height: 42, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', margin: { top: 4 } }}>
+                  <Label value={`${fmtTime(cur)} / ${fmtTime(dur)}`} fontSize={13} color={Color4.create(0.6, 0.85, 0.7, 1)} uiTransform={{ width: 120, height: 24 }} />
+                  <UiEntity uiTransform={{ flexGrow: 1, height: 38, flexDirection: 'row', justifyContent: 'flex-end' }}>
+                    {seekBtns.map((b, i) => (
+                      <UiEntity key={i} uiTransform={{ width: 58, height: 38, justifyContent: 'center', alignItems: 'center', margin: { left: 4 } }}
+                        uiBackground={{ color: Color4.create(0.14, 0.15, 0.2, 1) }}
+                        onMouseDown={() => seekRelative(b.d)}>
+                        <Label value={b.l} fontSize={16} color={Color4.create(0.85, 1, 0.9, 1)} />
+                      </UiEntity>
+                    ))}
+                  </UiEntity>
+                </UiEntity>
+              </UiEntity>
+            )
+          })()}
           {/* Selector de playlist (sin emojis → se leen) */}
           <Label value="PLAYLIST:" fontSize={14} color={Color4.create(0.5, 0.7, 0.9, 1)} uiTransform={{ width: '100%', height: 22, margin: { top: 12 } }} />
           {PlaylistLibrary.map((lib, idx) => (
@@ -361,11 +401,11 @@ const uiComponent = () => {
               <Label value={lib.name.replace(/[^\x00-\x7F]/g, '').trim()} fontSize={13} color={Color4.White()} />
             </UiEntity>
           ))}
-          {/* Lista de tracks (click = reproducir) */}
-          <UiEntity uiTransform={{ width: '100%', height: 162, flexDirection: 'column', margin: { top: 6 } }}>
-            {Playlist.tracks.slice(0, 6).map((tr, i) => (
-              <UiEntity key={i} uiTransform={{ width: '100%', height: 26 }} onMouseDown={() => { jumpToTrack(i) }}>
-                <Label value={`${i === Playlist.currentIndex ? '▶ ' : '   '}${tr.name}`} fontSize={13}
+          {/* Lista de tracks (click = reproducir) — TODOS, con scroll y numerados */}
+          <UiEntity uiTransform={{ width: '100%', flexGrow: 1, flexDirection: 'column', margin: { top: 6 }, overflow: 'scroll' }}>
+            {Playlist.tracks.map((tr, i) => (
+              <UiEntity key={i} uiTransform={{ width: '100%', height: 26, flexShrink: 0 }} onMouseDown={() => { jumpToTrack(i) }}>
+                <Label value={`${i === Playlist.currentIndex ? '▶ ' : ''}${i + 1}. ${tr.name}`} fontSize={13}
                   color={i === Playlist.currentIndex ? Color4.create(0.3, 1, 0.45, 1) : Color4.create(0.78, 0.8, 0.85, 1)} uiTransform={{ width: '100%', height: 24 }} />
               </UiEntity>
             ))}

@@ -197,8 +197,12 @@ export function main() {
   applyAspect(order[0])
   Playlist.currentIndex = order[0]
 
-  // Siguiente índice de la bolsa (re-barajando al agotarse, sin repetir al cruzar tanda).
+  // Siguiente índice. Con shuffle APAGADO → secuencial relativo al track actual
+  // (currentIndex + 1). Con shuffle PRENDIDO → bolsa barajada (re-barajando al agotarse).
   const nextIndex = (): number => {
+    if (!Playlist.shuffle) {
+      return (Playlist.currentIndex + 1) % Playlist.tracks.length
+    }
     orderPos++
     if (orderPos >= order.length) {
       const last = order[order.length - 1]
@@ -219,12 +223,14 @@ export function main() {
   const _playRaw = (idx: number) => {
     const safe = Math.max(0, Math.min(idx, Playlist.tracks.length - 1))
     const vp = VideoPlayer.getMutable(screenVideo)
-    vp.src     = Playlist.tracks[safe].url
-    vp.playing = !Playlist.paused
+    vp.src      = Playlist.tracks[safe].url
+    vp.playing  = !Playlist.paused
+    vp.position = 0      // arrancar desde el inicio: NO heredar el seek del track anterior
     Playlist.currentIndex = safe
     applyAspect(safe)
     armed = false        // declarados más abajo, accedidos vía closure
     videoClock = 0
+    pendingSeek = -1     // cancelar cualquier seek pendiente al cambiar de track
   }
 
   // Reproduce idx guardando el track actual en el historial (next/jump).
@@ -237,6 +243,13 @@ export function main() {
   const advanceVideo = () => playTrack(nextIndex())
 
   const goToPrev = () => {
+    // Shuffle apagado → anterior secuencial (currentIndex - 1).
+    if (!Playlist.shuffle) {
+      const n = Playlist.tracks.length
+      _playRaw((Playlist.currentIndex - 1 + n) % n)
+      return
+    }
+    // Shuffle prendido → retroceder por el historial real de reproducción.
     if (history.length > 0) {
       _playRaw(history.pop()!)
     } else {
@@ -254,6 +267,8 @@ export function main() {
   let lastSkip     = Playlist.skipToken
   let lastPrev     = Playlist.prevToken
   let lastLoad     = Playlist.loadToken
+  let pendingSeek      = -1   // posición buscada, esperando que el video confirme el salto
+  let pendingSeekClock = 0
 
   engine.addSystem((dt: number) => {
     // STREAM nativo activo (admin activó Cast/OBS) → la pantalla muestra el vivo. Cedemos.
@@ -313,6 +328,7 @@ export function main() {
       const targetSec = Playlist.seekTo
       Playlist.seekTo = -1
       svp.position = targetSec
+      pendingSeek = targetSec; pendingSeekClock = 0
     }
 
     // Watchdog normal.
@@ -323,12 +339,26 @@ export function main() {
       const ev = evs[evs.length - 1]
       if (ev) { len = ev.videoLength; off = ev.currentOffset }
     }
-    Playlist.currentTime = off
+    // currentTime: tras un seek mostramos el target (optimista) hasta que el video confirme
+    // el salto (off se acerca) o pase un timeout — así los clicks rápidos encadenan bien.
+    if (pendingSeek >= 0) {
+      pendingSeekClock += dt
+      if (Math.abs(off - pendingSeek) < 1.5 || pendingSeekClock > 2) {
+        pendingSeek = -1
+        Playlist.currentTime = off
+      } else {
+        Playlist.currentTime = pendingSeek
+      }
+    } else {
+      Playlist.currentTime = off
+    }
     Playlist.duration = len
 
     if (len > 0 && off < len * 0.5) armed = true
     if (armed && len > 0 && off >= len - 0.3) {
       advanceVideo()                     // fin normal del video
+    } else if (len > 0 && off >= len - 0.3 && videoClock > 2) {
+      advanceVideo()                     // arrancó pegado al final (glitch) → no esperar 35s
     } else if (!armed && videoClock > LOAD_TIMEOUT) {
       advanceVideo()                     // nunca arrancó → saltar al siguiente
     }
@@ -542,18 +572,25 @@ export function main() {
   // 8. Mini-juego: Paintball — NPC Referee cerca del spawn que invita a jugar.
   setupPaintball()
 
-  // 7. Montado en el lomo: el avatar deja de colisionar con los árboles (va con el
-  // monstruo, que los atraviesa). Al bajar al piso (ridingMonster=false) vuelven a
-  // colisionar. Solo togglea al cambiar de estado, no cada frame.
-  let arbolesColliding = true
+  // 7. Montado en el lomo: el avatar deja de colisionar con los árboles Y con el track
+  // (que incluye los EDIFICIOS de la arena). El monstruo los atraviesa; así el rider también
+  // y NO se cae al chocar una pared mientras lo lleva. Al bajar (ridingMonster=false) vuelven.
+  // Es por-cliente: solo afecta al que está montando. En multiplayer el host conserva su
+  // track sólido → el monstruo sigue copiando el terreno para todos.
+  // (Trade-off solo/host: mientras montás, el sensor de piso del monstruo no lee el track y
+  //  mantiene su última altura. Para que además trepe la arena MIENTRAS lo montás haría falta
+  //  separar en Blender los edificios en su propio GLB/collision-layer.)
+  let lastRiding = false
   engine.addSystem(() => {
-    const shouldCollide = !RaceState.ridingMonster
-    if (shouldCollide === arbolesColliding) return
-    arbolesColliding = shouldCollide
-    const g = GltfContainer.getMutableOrNull(arbolesEntity)
-    if (!g) return
-    const mask = shouldCollide ? ColliderLayer.CL_PHYSICS : ColliderLayer.CL_NONE
-    g.visibleMeshesCollisionMask   = mask
-    g.invisibleMeshesCollisionMask = mask
+    const riding = RaceState.ridingMonster
+    if (riding === lastRiding) return
+    lastRiding = riding
+    const mask = riding ? ColliderLayer.CL_NONE : ColliderLayer.CL_PHYSICS
+    for (const ent of [arbolesEntity, trackEntity]) {
+      const g = GltfContainer.getMutableOrNull(ent)
+      if (!g) continue
+      g.visibleMeshesCollisionMask   = mask
+      g.invisibleMeshesCollisionMask = mask
+    }
   })
 }

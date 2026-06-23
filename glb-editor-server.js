@@ -297,6 +297,18 @@ function updateSpawnArea(x, y, z, rx, ry, rz, rw, sx, sy, sz) {
   // del editor = el punto exacto donde aparece el jugador.
   const adjustedY = y
 
+  // scene.json lo lee el CLIENTE directo (NO le aplica el offset de runtime), así que la Y
+  // del spawn debe ir con el valor FINAL = piso + WORLD_Y_OFFSET. Sin esto, mover el spawn en
+  // el editor te dropea bajo la isla (faltaba el +offset). Leemos el offset de spawnConfig.ts.
+  const spawnConfigPath = path.join(__dirname, 'src', 'spawnConfig.ts')
+  let yOffset = 50
+  try {
+    const prev = fs.readFileSync(spawnConfigPath, 'utf8')
+    const offM = prev.match(/WORLD_Y_OFFSET\s*=\s*(-?\d+(?:\.\d+)?)/)
+    if (offM) yOffset = parseFloat(offM[1])
+  } catch (e) {}
+  const worldY = adjustedY + yOffset
+
   const scene = JSON.parse(fs.readFileSync(SCENE_JSON, 'utf8'))
   if (!scene.spawnPoints || scene.spawnPoints.length === 0) {
     scene.spawnPoints = [{
@@ -309,7 +321,7 @@ function updateSpawnArea(x, y, z, rx, ry, rz, rw, sx, sy, sz) {
   const sp = scene.spawnPoints[0]
 
   const rx0 = Math.round(x * 10) / 10
-  const ry0 = Math.round(adjustedY * 10) / 10
+  const ry0 = Math.round(worldY * 10) / 10   // valor FINAL (piso + offset) para el cliente
   const rz0 = Math.round(z * 10) / 10
 
   // Punto único (min === max) → spawn exacto, sin aleatoriedad.
@@ -332,22 +344,15 @@ function updateSpawnArea(x, y, z, rx, ry, rz, rw, sx, sy, sz) {
 
   if (sp.cameraTarget) {
     sp.cameraTarget.x = Math.round((x + fwdX * 5.0) * 10) / 10
-    sp.cameraTarget.y = Math.round(adjustedY * 10) / 10
+    sp.cameraTarget.y = Math.round(worldY * 10) / 10   // valor FINAL (piso + offset)
     sp.cameraTarget.z = Math.round((z + fwdZ * 5.0) * 10) / 10
   }
 
   fs.writeFileSync(SCENE_JSON, JSON.stringify(scene, null, 2), 'utf8')
 
   // Also update src/spawnConfig.ts so index.ts gets the live coordinates and rotation target.
-  // IMPORTANTE: preservamos WORLD_Y_OFFSET (lo importa todo el proyecto) y lo aplicamos al
-  // spawn. El editor trabaja en coords "a nivel piso"; el offset eleva todo en runtime.
-  const spawnConfigPath = path.join(__dirname, 'src', 'spawnConfig.ts')
-  let yOffset = 50
-  try {
-    const prev = fs.readFileSync(spawnConfigPath, 'utf8')
-    const offM = prev.match(/WORLD_Y_OFFSET\s*=\s*(-?\d+(?:\.\d+)?)/)
-    if (offM) yOffset = parseFloat(offM[1])
-  } catch (e) {}
+  // IMPORTANTE: spawnConfig.ts guarda la Y "a nivel piso" y le SUMA WORLD_Y_OFFSET en el
+  // literal (index.ts usa ese valor ya elevado). El offset (yOffset) se leyó arriba.
   const camX = (x + fwdX * 5.0).toFixed(1)
   const camZ = (z + fwdZ * 5.0).toFixed(1)
   const content = `import { Vector3 } from '@dcl/sdk/math'

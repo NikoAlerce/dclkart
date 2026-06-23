@@ -92,6 +92,20 @@ export function jumpToTrack(i: number) {
 }
 export function togglePause() { Playlist.paused = !Playlist.paused }
 export function toggleMute()  { Playlist.muted  = !Playlist.muted }
+// Saltar a una fracción (0..1) de la duración del video actual. El system de index.ts
+// lee Playlist.seekTo y mueve la posición del VideoPlayer. Clamp a dur-0.5 para no caer
+// justo en el final (eso dispararía el avance al siguiente video).
+export function seekToFraction(frac: number) {
+  const f = Math.max(0, Math.min(1, frac))
+  if (Playlist.duration > 0) Playlist.seekTo = Math.min(f * Playlist.duration, Playlist.duration - 0.5)
+}
+// Saltar ±N segundos. Si hay un seek pendiente sin consumir, encadenamos desde ahí
+// (clicks rápidos) en vez de desde currentTime, que llega con retraso desde los VideoEvent.
+export function seekRelative(deltaSec: number) {
+  if (Playlist.duration <= 0) return
+  const base = Playlist.seekTo >= 0 ? Playlist.seekTo : (Playlist.currentTime || 0)
+  Playlist.seekTo = Math.max(0, Math.min(base + deltaSec, Playlist.duration - 0.5))
+}
 export function changeVolume(delta: number) {
   Playlist.volume = Math.max(0, Math.min(1, Math.round((Playlist.volume + delta) * 10) / 10))
 }

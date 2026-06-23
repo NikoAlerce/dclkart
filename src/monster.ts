@@ -4,7 +4,7 @@ import {
   InputAction, pointerEventsSystem, Entity, MeshRenderer, Material,
   Tween, EasingFunction
 } from '@dcl/sdk/ecs'
-import { Vector3, Quaternion } from '@dcl/sdk/math'
+import { Vector3, Quaternion, Color4, Color3 } from '@dcl/sdk/math'
 import { syncEntity } from '@dcl/sdk/network'
 import { movePlayerTo } from '~system/RestrictedActions'
 import { RaceState } from './raceState'
@@ -39,12 +39,18 @@ const TURN_PER_LEG = 25        // giro máximo por tramo (la rotación va DENTRO
 // Plataforma sólida sobre el lomo (collider de caja, emparentada → se mueve/gira con
 // el monstruo). La malla animada da colisiones erráticas; esta caja es predecible para
 // pararse encima. Valores en espacio del modelo (se multiplican por SCALE).
-// ⚠️ AFINAR VISUAL si quedás flotando/hundido al subir: BACK_Y (altura), BACK_CX (centro).
-// Calibrado: 0.4 (cuello) → 0.5 (20cm flotando) → 0.488 (justo sobre el lomo).
-const BACK_Y      = 0.488
-const BACK_CX     = -0.7
-const BACK_LEN_X  = 3.4
-const BACK_WID_Z  = 2.8
+// Caja del lomo — valores EXACTOS del empty "floorcollisions" del GLB re-exportado (rot identidad).
+// El scale del empty son MEDIAS-extensiones; el box de DCL (MeshCollider.setBox = lado 1) usa el DOBLE.
+// (Verificado: top 0.387+0.252=0.639 ≈ la altura que habíamos calibrado a mano.)
+const BACK_CX     = -0.236  // pos.x del empty NEGADA (X-flip de DCL espeja el GLB)
+const BACK_Y      = 0.387   // pos.y del empty (centro vertical del box)
+const BACK_CZ     = -0.022  // pos.z del empty (centro a lo ancho)
+const BACK_LEN_X  = 2.0     // 1.0   × 2 (largo X)
+const BACK_THICK  = 0.504   // 0.252 × 2 (alto Y)
+const BACK_WID_Z  = 1.45    // un poco más angosto aún (eje Z)
+// ⚠️ TEMP de calibración: pinta el cubo del lomo (magenta translúcido) para ver el collider
+// y guiar dónde achicar. Poné en false cuando terminemos de ajustar BACK_LEN_X/WID_Z/CX/Y.
+const BACK_DEBUG  = false
 
 // Piso mínimo: la isla jugable está elevada con WORLD_Y_OFFSET. El sensor de piso debe
 // IGNORAR el terreno procedural de DCL (Y≈0) que no se puede apagar — si no, el monstruo
@@ -54,7 +60,9 @@ const MIN_GROUND_Y = WORLD_Y_OFFSET + 8   // ≈ 58 (la isla/track ronda Y 60+)
 // Zona de paseo (XZ): TODO el terreno (bounds del mapa según el minimapa: X[-538,278] Z[-205,611]).
 // Deambula por todas partes y, con el sensor de piso, COPIA las irregularidades del terreno.
 // Sobre el vacío flota a la altura mínima en vez de hundirse (MIN_GROUND_Y).
-const ROAM = { minX: -500, maxX: 250, minZ: -190, maxZ: 590 }
+// Encerrado en las PARCELAS (scene-local X[-768,160] Z[-288,784]) ∩ terreno del track,
+// con margen para el cuerpo gigante (~±20m) → no se sale del mundo.
+const ROAM = { minX: -530, maxX: 135, minZ: -200, maxZ: 600 }
 // Posición inicial ALEATORIA: arranca en un punto al azar del terreno (distinto cada sesión).
 // El host es quien manda; su posición/recorrido se propaga por el Tween sincronizado → todos
 // los jugadores lo ven en el mismo lugar. (El raycast de spawn ignora su plataforma, así que
@@ -70,7 +78,28 @@ const AVOID_DIST   = 120
 const AVOID_HEIGHT = 28
 const AVOID_TURN   = 65
 
+// Objetos que el monstruo NO debe atravesar (zonas de exclusión, world XZ). Como es gigante,
+// mantenemos su CENTRO a `r` del objeto. Coords de index.ts (flowerman/pantalla) y paintballSigns.ts.
+const AVOID_ZONES = [
+  { x: -104.23, z: 73.22,  r: 30 },  // Flowerman
+  { x: -262.83, z: 125.50, r: 55 },  // Pantalla gigante (TV)
+  { x: -22,     z: 272,    r: 55 }   // Carteles de paintball
+]
+function inZone(x: number, z: number): boolean {
+  for (const zo of AVOID_ZONES) {
+    const dx = x - zo.x, dz = z - zo.z
+    if (dx * dx + dz * dz < zo.r * zo.r) return true
+  }
+  return false
+}
+
 function randTarget() {
+  // Elegir un destino que NO caiga dentro de una zona de exclusión.
+  for (let i = 0; i < 8; i++) {
+    const x = ROAM.minX + Math.random() * (ROAM.maxX - ROAM.minX)
+    const z = ROAM.minZ + Math.random() * (ROAM.maxZ - ROAM.minZ)
+    if (!inZone(x, z)) return { x, z }
+  }
   return {
     x: ROAM.minX + Math.random() * (ROAM.maxX - ROAM.minX),
     z: ROAM.minZ + Math.random() * (ROAM.maxZ - ROAM.minZ)
@@ -115,9 +144,10 @@ export function setupMonster(arbolesEntity?: Entity, screenVideo?: Entity) {
   if (screenVideo !== undefined) {
     // El lomo (local X) va de ≈ -2.4 (TROMPA/frente, hacia donde camina) a +1.05 (culo).
     // La TV va en la trompa, mirando al CENTRO del lomo (donde están los riders).
-    const TV_POS = Vector3.create(-2.6, BACK_Y, -0.14)       // trompa (frente, dir. de avance)
-    const TV_ROT = Quaternion.fromEulerDegrees(0, -90, 0)    // pantalla hacia +X = centro/riders
-    const TV_SCALE = Vector3.create(0.3, 0.3, 0.3)           // ≈ altura de avatar (×SCALE)
+    // Posición/tamaño EXACTOS del empty "tvempty" del GLB. X NEGADA (X-flip de DCL). Scale ×2.
+    const TV_POS = Vector3.create(-0.601, 0.609, -0.144)     // +0.25 (= 4m hacia el centro del monstruo)
+    const TV_ROT = Quaternion.fromEulerDegrees(0, -94, 0)    // ~4° hacia el culo (si gira al revés, usar -86)
+    const TV_SCALE = Vector3.create(1.062, 1.062, 1.062)     // 0.354 × 3 (triple)
     const tvAnchor = engine.addEntity()
     Transform.create(tvAnchor, { parent: monster, position: TV_POS, rotation: TV_ROT, scale: TV_SCALE })
     GltfContainer.create(tvAnchor, { src: 'assets/models/screen.glb' })
@@ -137,10 +167,20 @@ export function setupMonster(arbolesEntity?: Entity, screenVideo?: Entity) {
   const back = engine.addEntity()
   Transform.create(back, {
     parent:   monster,
-    position: Vector3.create(BACK_CX, BACK_Y, -0.14),
-    scale:    Vector3.create(BACK_LEN_X, 0.3, BACK_WID_Z)
+    position: Vector3.create(BACK_CX, BACK_Y, BACK_CZ),
+    scale:    Vector3.create(BACK_LEN_X, BACK_THICK, BACK_WID_Z)
   })
   MeshCollider.setBox(back, ColliderLayer.CL_PHYSICS)
+  if (BACK_DEBUG) {
+    // Hacemos visible el collider para calibrar (magenta translúcido y emisivo).
+    MeshRenderer.setBox(back)
+    Material.setPbrMaterial(back, {
+      albedoColor: Color4.create(1, 0, 1, 0.35),
+      emissiveColor: Color3.create(1, 0, 1),
+      emissiveIntensity: 2,
+      transparencyMode: 2,
+    })
+  }
 
   // ── Collider de CLICK (pointer) que cubre el cuerpo: clic → te sube al lomo. ──
   const clickCollider = engine.addEntity()
@@ -236,7 +276,14 @@ export function setupMonster(arbolesEntity?: Entity, screenVideo?: Entity) {
             if (best === null || h.position.y > best) best = h.position.y
           }
         }
-        groundY = best !== null ? best : Math.max(groundY, MIN_GROUND_Y)
+        if (best !== null) {
+          // Suavizar el cambio de nivel (evita el tartamudeo al pasar entre pisos de la arena):
+          // sube RÁPIDO (no se hunde al pisar algo más alto), baja DESPACIO (no cae de golpe).
+          const k = best > groundY ? Math.min(1, dt * 8) : Math.min(1, dt * 3)
+          groundY += (best - groundY) * k
+        } else {
+          groundY = Math.max(groundY, MIN_GROUND_Y)
+        }
       }
 
       // Próximo tramo: emitido ANTES de que termine el actual (solape) → sin micro-freno.
@@ -272,6 +319,19 @@ export function setupMonster(arbolesEntity?: Entity, screenVideo?: Entity) {
         } else {
           avoidDir = 0
           desiredYaw = targetYaw
+        }
+
+        // Esquivar objetos puntuales (flowerman, TV gigante, carteles): si voy hacia una zona
+        // cercana, desvío el rumbo (tangente si me acerco, de frente si estoy muy adentro).
+        for (const zo of AVOID_ZONES) {
+          const zdx = zo.x - cur.x, zdz = zo.z - cur.z
+          const zdist = Math.sqrt(zdx * zdx + zdz * zdz)
+          if (zdist < zo.r + 50) {
+            const towardYaw = Math.atan2(zdx, zdz) * 180 / Math.PI
+            const diff = angleDiff(desiredYaw, towardYaw)
+            if (zdist < zo.r + 8) desiredYaw = towardYaw + 180          // muy cerca → alejarse
+            else if (Math.abs(diff) < 75) desiredYaw = towardYaw - (diff >= 0 ? 90 : -90) // tangente
+          }
         }
 
         // Ajuste de rumbo gradual; la rotación visual se suaviza por frame (arriba).
@@ -313,12 +373,14 @@ export function setupMonster(arbolesEntity?: Entity, screenVideo?: Entity) {
         Vector3.create(pT.position.x - t.position.x, pT.position.y - t.position.y, pT.position.z - t.position.z),
         inv
       )
-      const platTopY = (BACK_Y + 0.15) * SCALE
+      const platTopY = (BACK_Y + BACK_THICK / 2) * SCALE
       const onXZ = Math.abs(rel.x - BACK_CX * SCALE) < (BACK_LEN_X * SCALE) / 2 + 2 &&
-                   Math.abs(rel.z + 0.14 * SCALE) < (BACK_WID_Z * SCALE) / 2 + 2
+                   Math.abs(rel.z - BACK_CZ * SCALE) < (BACK_WID_Z * SCALE) / 2 + 2
       const dy = rel.y - platTopY
-      if (onXZ && dy > -3.0 && dy < 8.0) ridingGrace = 0.6 // sobre el lomo → refrescar grace
-      else ridingGrace = Math.max(0, ridingGrace - dt)     // afuera → decae (sin parpadeo)
+      // Grace corto: apenas te bajás del lomo se reactiva la colisión del track casi al
+      // instante → caés SOBRE el piso, no a través (evita caer al vacío al desmontar).
+      if (onXZ && dy > -3.0 && dy < 8.0) ridingGrace = 0.2 // sobre el lomo → refrescar grace
+      else ridingGrace = Math.max(0, ridingGrace - dt)     // afuera → decae rápido
       RaceState.ridingMonster = ridingGrace > 0
     } else {
       RaceState.ridingMonster = false

@@ -98,5 +98,5 @@ export const KART_CONFIGS: KartConfig[] = [
   { id: 7,  modelPath: 'assets/models/kart7.glb', spawnPos: Vector3.create(-205, 65, 104), spawnRotY: 0.0},
   { id: 8,  modelPath: 'assets/models/kart8.glb', spawnPos: Vector3.create(-201, 65, 104), spawnRotY: 0.0},
   { id: 9,  modelPath: 'assets/models/kart9.glb', spawnPos: Vector3.create(-197, 65, 104), spawnRotY: 0.0},
-  { id: 10, modelPath: 'assets/models/kart10.glb',spawnPos: Vector3.create(-193, 65, 104), spawnRotY: 0.0, scale: 1.08, modelYawOffset: -108.3, groundOffsetY: 1.25},
+  { id: 10, modelPath: 'assets/models/kart10.glb',spawnPos: Vector3.create(-76.7, 65.0, 37.6), spawnRotY: 0.0, scale: 1.08, modelYawOffset: -108.3, groundOffsetY: 1.25},
 ]

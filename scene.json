@@ -3936,7 +3936,7 @@
     "nearbyVoiceChat": "enabled"
   },
   "skyboxConfig": {
-    "fixedTime": 36000
+    "fixedTime": 63000
   },
   "creator": "",
   "worldConfiguration": {
