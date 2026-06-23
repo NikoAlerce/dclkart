@@ -73,19 +73,30 @@ export function setupMonster(arbolesEntity?: Entity, screenVideo?: Entity) {
   // Multiplayer: el host simula la IA y propaga el Transform; los demás lo reciben.
   syncEntity(monster, [Transform.componentId], SYNC_IDS.monster)
 
-  // TV en el lomo mostrando el MISMO stream/playlist que la pantalla principal.
-  // Reusa el VideoPlayer de screenVideo via textura de video (un solo stream, varias
-  // superficies). Así se puede ridear en multiplayer mirando el vivo en su lomo.
+  // ── TV NOVENTERA (screen.glb) chiquita sobre el lomo, en la TROMPA ─────────────
+  // El modelo real de la TV apoyado adelante del lomo (~altura de avatar), con el
+  // MISMO stream que la pantalla principal (reusa el VideoPlayer de screenVideo via
+  // textura de video). Los que rideen el lomo ven el vivo en esta tele.
+  // tvAnchor sostiene el GLB; el plano de video va con las MISMAS coords relativas que
+  // la pantalla grande (index.ts), así calza en la cara de la pantalla a cualquier escala.
+  // ⚠️ AFINAR VISUAL: TV_POS (dónde), TV_ROT (que la pantalla mire a los riders), TV_SCALE.
   if (screenVideo !== undefined) {
-    const tv = engine.addEntity()
-    Transform.create(tv, {
-      parent:   monster,
-      position: Vector3.create(BACK_CX, BACK_Y + 2.6, -0.14), // parado sobre la plataforma del lomo
+    const TV_POS = Vector3.create(1.2, BACK_Y, -0.14)        // adelante del lomo (trompa)
+    const TV_ROT = Quaternion.fromEulerDegrees(0, -90, 0)    // pantalla hacia los riders (atrás)
+    const TV_SCALE = Vector3.create(0.3, 0.3, 0.3)           // ~1.5m de pantalla (×SCALE del monstruo)
+    const tvAnchor = engine.addEntity()
+    Transform.create(tvAnchor, { parent: monster, position: TV_POS, rotation: TV_ROT, scale: TV_SCALE })
+    GltfContainer.create(tvAnchor, { src: 'assets/models/screen.glb' })
+
+    const tvVideo = engine.addEntity()
+    Transform.create(tvVideo, {
+      parent:   tvAnchor,
+      position: Vector3.create(0, 0.2684, -0.008), // mismas coords relativas que la pantalla grande
       rotation: Quaternion.fromEulerDegrees(0, 180, 0),
-      scale:    Vector3.create(3.4, 2.0, 1.0)
+      scale:    Vector3.create(-0.42, 0.32, 1.0)
     })
-    MeshRenderer.setPlane(tv)
-    Material.setBasicMaterial(tv, { texture: Material.Texture.Video({ videoPlayerEntity: screenVideo }) })
+    MeshRenderer.setPlane(tvVideo)
+    Material.setBasicMaterial(tvVideo, { texture: Material.Texture.Video({ videoPlayerEntity: screenVideo }) })
   }
 
   // Plataforma sólida sobre el lomo (parented → se mueve/gira con el monstruo).
@@ -270,13 +281,20 @@ export function setupMonster(arbolesEntity?: Entity, screenVideo?: Entity) {
       const dy = rel.y - platTopY
       if (onXZ && dy > -2.5 && dy < 4.0) {
         RaceState.ridingMonster = true
-        // Girar al jugador alrededor del centro del monstruo por el delta de yaw, + trasladar
-        const dRad = ((worldYaw - prevYaw) * Math.PI) / 180
-        const rx = pT.position.x - prevX, rz = pT.position.z - prevZ
-        const nx = prevX + (rx * Math.cos(dRad) + rz * Math.sin(dRad)) + (t.position.x - prevX)
-        const nz = prevZ + (-rx * Math.sin(dRad) + rz * Math.cos(dRad)) + (t.position.z - prevZ)
-        const ny = pT.position.y + (t.position.y - prevY)
-        movePlayerTo({ newRelativePosition: Vector3.create(nx, ny, nz) }).catch(() => {})
+        // Delta de movimiento del monstruo este frame
+        const mdx = t.position.x - prevX, mdz = t.position.z - prevZ, mdy = t.position.y - prevY
+        const dYaw = angleDiff(prevYaw, worldYaw) // camino más corto (evita salto de 360° al wrappear)
+        const moved = Math.abs(mdx) + Math.abs(mdz) + Math.abs(mdy) > 0.002 || Math.abs(dYaw) > 0.02
+        // SOLO llevamos al jugador cuando el monstruo se movió. Si está quieto, NO tocamos
+        // su posición → camina LIBREMENTE sobre el lomo (antes movePlayerTo cada frame lo anclaba).
+        if (moved) {
+          const dRad = dYaw * Math.PI / 180
+          const rx = pT.position.x - prevX, rz = pT.position.z - prevZ
+          const nx = prevX + (rx * Math.cos(dRad) + rz * Math.sin(dRad)) + mdx
+          const nz = prevZ + (-rx * Math.sin(dRad) + rz * Math.cos(dRad)) + mdz
+          const ny = pT.position.y + mdy
+          movePlayerTo({ newRelativePosition: Vector3.create(nx, ny, nz) }).catch(() => {})
+        }
       } else {
         RaceState.ridingMonster = false
       }
