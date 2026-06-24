@@ -21,7 +21,7 @@ import { setupPowerups, clearPowerups } from './paintballPowerups'
 import { PLAYER_PAINT } from './paintballColors'
 import { pbBus, PB_MSG, PlayerHitMsg, PlayerShotMsg, PlayerKilledMsg, ScoreMsg, PresenceMsg, JoinTeamMsg, TeamRosterMsg } from './paintballNet'
 import { ScoreEntry } from './paintballState'
-import { getMyId, getMyAddr, isHost } from './net'
+import { getMyAddr, isHost } from './net'
 import { getPlayer } from '@dcl/sdk/players'
 import { ARENA_NPC, TEAM_SPAWN_T, TEAM_SPAWN_CT, FFA_SPAWNS, TEAM_COLOR_T, TEAM_COLOR_CT, ARENA_CENTER, ArenaCalibration, applyArenaCalibration, setupSpawnCalibration, ARENA_FLOOR_Y } from './paintballArena'
 import { setupMatch, requestStartMatch } from './paintballMatch'
@@ -247,7 +247,7 @@ function hitTarget(entity: Entity) {
   if (idx >= 0) {
     // Friendly fire OFF con bots: en modo equipos no le pegás a un bot de tu equipo.
     if (PaintballState.matchMode === 1 && PaintballState.myTeam !== 0 && getBotTeam(idx) === PaintballState.myTeam) return
-    pbBus.emit(PB_MSG.botDamage, { bot: idx, by: getMyId() })
+    pbBus.emit(PB_MSG.botDamage, { bot: idx, by: getMyAddr() })
   } else {
     const id = PlayerIdentityData.getOrNull(entity)
     const isBot = BotState.has(entity)
@@ -260,8 +260,8 @@ function hitTarget(entity: Entity) {
         if (tTeam === PaintballState.myTeam) return
       }
       pbBus.emit(PB_MSG.playerHit, {
-        target: id.address,
-        by: getMyId(),
+        target: id.address.toLowerCase(),
+        by: getMyAddr(),
         r: myPaint.r,
         g: myPaint.g,
         b: myPaint.b
@@ -300,7 +300,7 @@ function fireTripleShot(eyePos: Vector3, fwd: Vector3) {
 
   for (const [entity, idData, otherTransform] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
     if (entity === engine.PlayerEntity) continue // no te pegues a vos mismo
-    if (idData.address === getMyId()) continue
+    if (idData.address.toLowerCase() === getMyAddr()) continue
     checkEntity(entity, otherTransform)
   }
   for (const [entity, , otherTransform] of engine.getEntitiesWith(BotState, Transform)) {
@@ -411,7 +411,7 @@ export function setupPaintball() {
   // PvP: si me llega un "te pegué" dirigido a mí, aplico mi propio daño (anti-cheat por honor).
   // Si ese golpe me mata, le aviso al atacante para que se acredite el kill.
   pbBus.on(PB_MSG.playerHit, (m: PlayerHitMsg) => {
-    if (m.target !== getMyId()) return
+    if (m.target !== getMyAddr()) return
     const wasDown = PaintballState.respawning
     receivePaintballHit(Color4.create(m.r, m.g, m.b, 1))
     if (!wasDown && PaintballState.respawning && m.by) {
@@ -422,7 +422,7 @@ export function setupPaintball() {
 
   // PvP: dibujar disparo de otro jugador
   pbBus.on(PB_MSG.playerShot, (m: PlayerShotMsg) => {
-    if (m.id === getMyId()) return
+    if (m.id === getMyAddr()) return
     const color = Color4.create(m.r, m.g, m.b, 1)
     const normalVec = Vector3.create(m.normal.x, m.normal.y, m.normal.z)
     
@@ -440,7 +440,7 @@ export function setupPaintball() {
 
   // PvP: maté a un jugador → crédito personal + punto de equipo (modo equipos activo).
   pbBus.on(PB_MSG.playerKilled, (m: PlayerKilledMsg) => {
-    if (m.by !== getMyId()) return
+    if (m.by !== getMyAddr()) return
     creditKill(m.name, myPaint)
     if (PaintballState.matchPhase === 2 && PaintballState.matchMode === 1 && PaintballState.myTeam !== 0) {
       pbBus.emit(PB_MSG.teamScore, { team: PaintballState.myTeam })
@@ -520,7 +520,7 @@ export function setupPaintball() {
     presenceBroadcastAccum += dt
     if (presenceBroadcastAccum >= 2.5) {
       presenceBroadcastAccum = 0
-      const myId = getMyId()
+      const myId = getMyAddr()
       if (myId) pbBus.emit(PB_MSG.presence, { id: myId, inArena: PaintballState.inGame && !PaintballState.gameOver })
     }
     // Decay presencia
@@ -694,7 +694,7 @@ export function setupPaintball() {
           // Bloqueado por cobertura: la pintura choca con la pared/objeto
           spawnLaser(lastEyePos, hitPos, myPaint,normal)
           pbBus.emit(PB_MSG.playerShot, {
-            id: getMyId(),
+            id: getMyAddr(),
             from: { x: lastEyePos.x, y: lastEyePos.y, z: lastEyePos.z },
             to: { x: hitPos.x, y: hitPos.y, z: hitPos.z },
             normal: { x: normal.x, y: normal.y, z: normal.z },
@@ -710,7 +710,7 @@ export function setupPaintball() {
           spawnLaser(lastEyePos, lastTargetBotPos, myPaint,Vector3.Zero())
           hitTarget(lastTargetBot)
           pbBus.emit(PB_MSG.playerShot, {
-            id: getMyId(),
+            id: getMyAddr(),
             from: { x: lastEyePos.x, y: lastEyePos.y, z: lastEyePos.z },
             to: { x: lastTargetBotPos.x, y: lastTargetBotPos.y, z: lastTargetBotPos.z },
             normal: { x: 0, y: 0, z: 0 },
@@ -723,7 +723,7 @@ export function setupPaintball() {
         // Disparo normal al entorno (no había ningún bot en el cono)
         spawnLaser(lastEyePos, hitPos, myPaint,normal)
         pbBus.emit(PB_MSG.playerShot, {
-          id: getMyId(),
+          id: getMyAddr(),
           from: { x: lastEyePos.x, y: lastEyePos.y, z: lastEyePos.z },
           to: { x: hitPos.x, y: hitPos.y, z: hitPos.z },
           normal: { x: normal.x, y: normal.y, z: normal.z },
@@ -787,7 +787,7 @@ export function setupPaintball() {
     scoreBroadcastAccum += dt
     if (scoreBroadcastAccum >= 1.5) {
       scoreBroadcastAccum = 0
-      const myId = getMyId()
+      const myId = getMyAddr()
       if (myId) {
         pbBus.emit(PB_MSG.score, {
           id: myId,
@@ -958,7 +958,7 @@ export function setupPaintball() {
           // NUNCA detectar tu propio avatar (en 3ra persona el disparo sale de la
           // cámara y tu avatar queda en el medio del cono → te matabas solo).
           if (entity === engine.PlayerEntity) continue
-          if (idData.address === getMyId()) continue
+          if (idData.address.toLowerCase() === getMyAddr()) continue
           if (checkEntityForShot(entity, otherTransform)) break
         }
         if (!lastTargetBot) {

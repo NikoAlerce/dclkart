@@ -6,7 +6,7 @@
 import { engine, Transform, MeshRenderer, Material, TextShape, Billboard, Schemas, Entity } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion, Color4, Color3 } from '@dcl/sdk/math'
 import { syncEntity } from '@dcl/sdk/network'
-import { isHost, getMyId, SYNC_IDS } from './net'
+import { isHost, getMyAddr, SYNC_IDS } from './net'
 import { pbBus, PB_MSG, PowerupTakenMsg } from './paintballNet'
 import { PaintballState } from './paintballState'
 import { FFA_SPAWNS } from './paintballArena'
@@ -167,7 +167,7 @@ function powerupSystem(dt: number) {
       if (dx * dx + dy * dy + dz * dz < PICKUP_RADIUS * PICKUP_RADIUS) {
         sd.takenLocally = true
         applyEffect(ps.kind)
-        pbBus.emit(PB_MSG.powerupTaken, { slot: sd.slot, by: getMyId() })
+        pbBus.emit(PB_MSG.powerupTaken, { slot: sd.slot, by: getMyAddr() })
         if (isHost()) deactivateSlot(sd)
       }
     }

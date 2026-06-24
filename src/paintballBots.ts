@@ -6,7 +6,7 @@ import { PaintballState, COMBO_WINDOW, KILLS_TO_WIN } from './paintballState'
 import { spawnLaser } from './paintballLasers'
 import { spawnBotExplosion, spawnMuzzleFlash } from './paintballFX'
 import { PaintColor, nextBotPaint } from './paintballColors'
-import { isHost, getMyId, SYNC_IDS } from './net'
+import { isHost, getMyAddr, SYNC_IDS } from './net'
 import { getPlayer } from '@dcl/sdk/players'
 import { pbBus, PB_MSG, BotDamageMsg, BotKilledMsg, BotShotMsg } from './paintballNet'
 import { FFA_SPAWNS, TEAM_SPAWN_T, TEAM_SPAWN_CT, TEAM_COLOR_T, TEAM_COLOR_CT, ARENA_FLOOR_Y, ArenaCalibration } from './paintballArena'
@@ -128,7 +128,7 @@ export function setupBots() {
     // Matar un bot da SCORE PERSONAL + combo (creditKill), pero NO mueve el marcador
     // de equipo: como los bots respawnean cada 4s, contarlos al cap (30) dejaría ganar
     // la ronda farmeando bots. El marcador T vs CT lo deciden solo los kills PvP.
-    if (m.by === getMyId()) creditKill(m.name, color)
+    if (m.by === getMyAddr()) creditKill(m.name, color)
   })
 
   // Disparo de un bot: todos dibujan el trazo; la víctima aplica su daño.
@@ -144,7 +144,7 @@ export function setupBots() {
       color,
       hitNormal
     )
-    if (m.hit !== '' && m.hit === getMyId()) receivePaintballHit(color)
+    if (m.hit !== '' && m.hit === getMyAddr()) receivePaintballHit(color)
   })
 }
 
@@ -410,10 +410,11 @@ type PlayerRef = { pos: Vector3; address: string }
 function collectPlayers(): PlayerRef[] {
   const out: PlayerRef[] = []
   const me = Transform.getOrNull(engine.PlayerEntity)
-  if (me) out.push({ pos: me.position, address: getMyId() })
+  if (me) out.push({ pos: me.position, address: getMyAddr() })
   for (const [, idData, tr] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-    if (idData.address.startsWith('bot_')) continue
-    out.push({ pos: tr.position, address: idData.address })
+    const addr = (idData.address || '').toLowerCase()
+    if (addr.startsWith('bot_')) continue
+    out.push({ pos: tr.position, address: addr })
   }
   return out
 }
@@ -423,12 +424,10 @@ function nearestPlayer(players: PlayerRef[], botPos: Vector3, botTeam: number): 
   for (const p of players) {
     // Modo equipos: el bot solo apunta al bando RIVAL. Salta a aliados (mismo equipo)
     // y a jugadores aún sin asignar (team 0), para no enjambrar a alguien que recién
-    // entró y todavía no recibió su equipo del host.
-    // Ojo identidad: collectPlayers usa getMyId() (userId) para el jugador LOCAL pero
-    // el roster se indexa por address → para mí uso PaintballState.myTeam directo (si
-    // userId≠address, getTeamOf(userId) fallaría y los bots me ignorarían).
+    // entró y todavía no recibió su equipo del host. collectPlayers normaliza la address
+    // a minúsculas (igual clave que el roster), incluido el jugador local vía getMyAddr().
     if (botTeam !== 0) {
-      const pteam = p.address === getMyId() ? PaintballState.myTeam : getTeamOf(p.address)
+      const pteam = getTeamOf(p.address)
       if (pteam === 0 || pteam === botTeam) continue
     }
     const dx = p.pos.x - botPos.x

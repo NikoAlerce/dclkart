@@ -6,6 +6,7 @@ import { RaceState } from './raceState'
 import { PaintballState, KILLS_TO_WIN } from './paintballState'
 import { getBotsForRadar } from './paintballBots'
 import { startPaintball, joinPaintball, exitPaintball } from './paintball'
+import { getMyAddr } from './net'
 import {
   Playlist, OWNER_ADDRESS, PlaylistLibrary, selectLibrary,
   requestSkip, previousTrack, togglePause, toggleMute, toggleShuffle, jumpToTrack, seekToFraction, seekRelative
@@ -229,7 +230,7 @@ const uiComponent = () => {
               <Label value="🏆 LEADERBOARD" fontSize={11} color={Color4.create(1, 0.85, 0.2, 1)} uiTransform={{ width: '100%', height: 16 }} />
               {ps.scoreboard.map((e, i) => (
                 <Label key={e.id} value={`${i + 1}. ${e.name}  ${e.score}`} fontSize={10}
-                  color={e.id === (getPlayer()?.userId || '') ? Color4.create(0.4, 1, 0.6, 1) : Color4.White()} uiTransform={{ width: '100%', height: 16 }} />
+                  color={e.id === getMyAddr() ? Color4.create(0.4, 1, 0.6, 1) : Color4.White()} uiTransform={{ width: '100%', height: 16 }} />
               ))}
             </UiEntity>
           )}
