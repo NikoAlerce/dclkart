@@ -557,15 +557,10 @@ function botSystem(dt: number) {
     const distToPlayer = np ? np.dist : Infinity
     const targetAddr = np ? np.address : ''
 
-    // ── Altura: seguir el PISO IRREGULAR con Navmesh + Raycast fallback ─────────
+    // ── Altura: seguir el PISO IRREGULAR con Raycast principal + Navmesh fallback ─────────
     let groundY: number | null = null
 
-    // 1. Intentar obtener altura del navmesh (rápido y exacto en multinivel)
-    if (isNavReady()) {
-      groundY = groundYAt(botPos.x, botPos.z, botPos.y)
-    }
-
-    // 2. Si el navmesh no está listo o no cubre este punto, usar raycast vertical
+    // 1. Usar el raycast vertical en tiempo real (más exacto para seguir rampas, desniveles y evitar hundimientos)
     const floorRay = RaycastResult.getOrNull(bot.entity)
     if (floorRay && floorRay.hits.length > 0) {
       const rayTop = botPos.y + 2.2
@@ -586,9 +581,13 @@ function botSystem(dt: number) {
         if (bestRayY === null || hit.position.y > bestRayY) bestRayY = hit.position.y
       }
       if (bestRayY !== null) {
-        // Si el navmesh falló, usamos el raycast como altura principal
-        if (groundY === null) groundY = bestRayY
+        groundY = bestRayY
       }
+    }
+
+    // 2. Si el raycast no encontró nada (ej: recién teletransportado o vacío temporal), usar el navmesh como fallback
+    if (groundY === null && isNavReady()) {
+      groundY = groundYAt(botPos.x, botPos.z, botPos.y)
     }
 
     // Recrear raycast para el próximo frame en la posición actual del bot (resuelve el bug de continuous raycast)
