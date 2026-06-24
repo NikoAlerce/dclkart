@@ -11,11 +11,32 @@ const PORT             = 9000
 const MODELS_DIR       = path.join(__dirname, 'assets', 'models')
 const INDEX_TS         = path.join(__dirname, 'src', 'index.ts')
 const KART_CONFIG_PATH = path.join(__dirname, 'src', 'kartConfig.ts')
+const SPAWN_CONFIG_TS  = path.join(__dirname, 'src', 'spawnConfig.ts')
 const SCENE_JSON       = path.join(__dirname, 'scene.json')
+
+// ── WORLD_Y_OFFSET: las entidades de index.ts guardan la Y "a nivel piso" (literal en
+// Vector3.create) y el runtime les SUMA este offset en una línea aparte
+// (`Transform.getMutable(X).position.y += WORLD_Y_OFFSET`). Los karts, en cambio, usan Y
+// ABSOLUTA. Para que el editor muestre TODO en el mismo frame (absoluto = el del preview),
+// al LEER esas entidades les sumamos el offset y al ESCRIBIR se lo restamos. Así el track
+// se ve a su altura real y los karts caen donde corresponde, igual que en el preview.
+function getWorldYOffset() {
+  try {
+    const sc = fs.readFileSync(SPAWN_CONFIG_TS, 'utf8')
+    const m = sc.match(/WORLD_Y_OFFSET\s*=\s*(-?\d+(?:\.\d+)?)/)
+    return m ? parseFloat(m[1]) : 50
+  } catch (e) { return 50 }
+}
+
+// ¿La entidad `varName` recibe `+= WORLD_Y_OFFSET` en runtime (línea aparte)?
+function entityHasYOffset(src, varName) {
+  return new RegExp(`Transform\\.getMutable\\(\\s*${varName}\\s*\\)\\.position\\.y\\s*\\+=\\s*WORLD_Y_OFFSET`).test(src)
+}
 
 // ── PARSER: extrae entidades GLB del index.ts ─────────────────
 function parseIndexTs() {
   const src = fs.readFileSync(INDEX_TS, 'utf8')
+  const WY  = getWorldYOffset()
   const entities = []
 
   const gltfRe = /GltfContainer\.create\((\w+),\s*\{[^}]*src:\s*['"]([^'"]+)['"]/gs
@@ -31,23 +52,29 @@ function parseIndexTs() {
     const varName = m[1]
     if (gltfMap[varName]) {
       const body = m[2]
-      
+
       // Parse position
       const posM = body.match(/position:\s*Vector3\.create\(([^)]+)\)/)
       const position = posM ? posM[1].split(',').map(s => parseFloat(s.trim())) : [0,0,0]
-      
+
+      // El literal guarda la Y "a nivel piso"; si el runtime le suma WORLD_Y_OFFSET,
+      // mostramos la Y ABSOLUTA (= literal + offset) para que coincida con el preview
+      // y con los karts (que ya están en coords absolutas).
+      const hasYOffset = entityHasYOffset(src, varName)
+      const yWorld = (position[1]||0) + (hasYOffset ? WY : 0)
+
       // Parse scale
       const scaleM = body.match(/scale:\s*Vector3\.create\(([^)]+)\)/)
       const scale = scaleM ? scaleM[1].split(',').map(s => parseFloat(s.trim())) : [1,1,1]
-      
+
       // Parse rotation
       const rotM = body.match(/rotation:\s*Quaternion\.create\(([^)]+)\)/)
       const rotation = rotM ? rotM[1].split(',').map(s => parseFloat(s.trim())) : [0,0,0,1]
-      
+
       entities.push({
         varName,
         src: gltfMap[varName],
-        position: { x: position[0]||0, y: position[1]||0, z: position[2]||0 },
+        position: { x: position[0]||0, y: yWorld, z: position[2]||0 },
         scale: { x: scale[0]||1, y: scale[1]||1, z: scale[2]||1 },
         rotation: { x: rotation[0]||0, y: rotation[1]||0, z: rotation[2]||0, w: rotation[3]||1 }
       })
@@ -168,6 +195,9 @@ function parseSpawnArea() {
 // ── WRITER: actualiza posición de una entidad en index.ts ─────
 function updatePosition(varName, x, y, z) {
   let src = fs.readFileSync(INDEX_TS, 'utf8')
+  // Si el runtime le suma WORLD_Y_OFFSET, el literal debe guardar la Y "a nivel piso"
+  // (= absoluta − offset); la línea `+= WORLD_Y_OFFSET` queda intacta y re-suma en runtime.
+  const yLit = entityHasYOffset(src, varName) ? (y - getWorldYOffset()) : y
   const re = new RegExp(
     `(Transform\\.create\\(${varName},[\\s\\S]*?position:\\s*Vector3\\.create\\()([^)]+)(\\))`,
     'g'
@@ -175,7 +205,7 @@ function updatePosition(varName, x, y, z) {
   let replaced = false
   const newSrc = src.replace(re, (match, pre, _coords, post) => {
     replaced = true
-    return `${pre}${x}, ${y}, ${z}${post}`
+    return `${pre}${x}, ${yLit}, ${z}${post}`
   })
   if (!replaced) throw new Error(`No se encontró Transform.create(${varName}, ...) en index.ts`)
   fs.writeFileSync(INDEX_TS, newSrc, 'utf8')
@@ -184,20 +214,24 @@ function updatePosition(varName, x, y, z) {
 // ── WRITER: actualiza posición, rotación y escala de una entidad en index.ts ────
 function updatePositionRotationScale(varName, x, y, z, rx, ry, rz, rw, sx, sy, sz) {
   let src = fs.readFileSync(INDEX_TS, 'utf8')
-  
+
+  // Si el runtime le suma WORLD_Y_OFFSET, el literal guarda la Y "a nivel piso"
+  // (= absoluta − offset). La línea `+= WORLD_Y_OFFSET` queda intacta y re-suma en runtime.
+  const yLit = entityHasYOffset(src, varName) ? (y - getWorldYOffset()) : y
+
   // Encontrar el bloque Transform.create(varName, { ... })
   const re = new RegExp(`(Transform\\.create\\(${varName},\\s*\\{)([\\s\\S]*?)(\\}\\))`, 'g')
-  
+
   let replaced = false
   src = src.replace(re, (match, pre, body, post) => {
     replaced = true
     let newBody = body
-    
+
     // Reemplazar posición
     if (newBody.includes('position:')) {
-      newBody = newBody.replace(/position:\s*Vector3\.create\([^)]+\)/, `position: Vector3.create(${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)})`)
+      newBody = newBody.replace(/position:\s*Vector3\.create\([^)]+\)/, `position: Vector3.create(${x.toFixed(2)}, ${yLit.toFixed(2)}, ${z.toFixed(2)})`)
     } else {
-      newBody = `    position: Vector3.create(${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)}),\n` + newBody
+      newBody = `    position: Vector3.create(${x.toFixed(2)}, ${yLit.toFixed(2)}, ${z.toFixed(2)}),\n` + newBody
     }
     
     // Reemplazar rotación

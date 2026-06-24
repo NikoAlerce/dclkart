@@ -57,23 +57,28 @@ const uiComponent = () => {
         <Label value={`X: ${posX}  Y: ${posY}  Z: ${posZ}`} fontSize={11} color={Color4.White()} uiTransform={{ width: '100%', height: 18 }} />
       </UiEntity>
 
-      {/* ══════════ HUD KART: CONTROLES + MINIMAPA (al manejar) ══════════ */}
+      {/* ══════════ HUD KART: CONTROLES (al manejar) ══════════ */}
+      {/* Top-left: libre tanto en preview como en deploy. Evita el chat (abajo-izq),
+          el minimapa (abajo-der) y el panel de coords (arriba-der). Aparece solo al
+          subirse (RaceState.isOccupied) y se oculta al bajarse. */}
       {RaceState.isOccupied && (
         <UiEntity
-          uiTransform={{ positionType: 'absolute', position: { bottom: 32, left: 32 }, width: 230, height: RaceState.vehicleType === 'ship' ? 100 : 80, padding: 10, flexDirection: 'column' }}
-          uiBackground={{ color: Color4.create(0, 0, 0, 0.45) }}
+          uiTransform={{ positionType: 'absolute', position: { top: 110, left: 24 }, width: 250, height: 104, padding: 12, flexDirection: 'column' }}
+          uiBackground={{ color: Color4.create(0, 0, 0, 0.6) }}
         >
-          <Label value="🏎️  CONTROLS" fontSize={13} color={Color4.create(1, 0.9, 0.1, 1)} uiTransform={{ width: '100%', height: 20 }} />
           {RaceState.vehicleType === 'kart' ? (
             <UiEntity uiTransform={{ flexDirection: 'column', width: '100%' }}>
-              <Label value="[W A S D] Manejar" fontSize={11} color={Color4.create(0.85, 0.85, 0.85, 1)} uiTransform={{ width: '100%', height: 16 }} />
-              <Label value="[Space] Drift   [E] Salir" fontSize={11} color={Color4.create(0.85, 0.85, 0.85, 1)} uiTransform={{ width: '100%', height: 16 }} />
+              <Label value="🏎️  CONTROLES" fontSize={13} color={Color4.create(1, 0.9, 0.1, 1)} uiTransform={{ width: '100%', height: 22 }} />
+              <Label value="[W A S D]  Manejar" fontSize={11} color={Color4.create(0.9, 0.9, 0.9, 1)} uiTransform={{ width: '100%', height: 18 }} />
+              <Label value="[Shift] Turbo    [Space] Drift" fontSize={11} color={Color4.create(0.9, 0.9, 0.9, 1)} uiTransform={{ width: '100%', height: 18 }} />
+              <Label value="[E]  Bajarse" fontSize={11} color={Color4.create(0.9, 0.9, 0.9, 1)} uiTransform={{ width: '100%', height: 18 }} />
             </UiEntity>
           ) : (
             <UiEntity uiTransform={{ flexDirection: 'column', width: '100%' }}>
-              <Label value="[W A S D] Volar" fontSize={11} color={Color4.create(0.85, 0.85, 0.85, 1)} uiTransform={{ width: '100%', height: 16 }} />
-              <Label value="[Space] Subir  [F] Bajar" fontSize={11} color={Color4.create(0.85, 0.85, 0.85, 1)} uiTransform={{ width: '100%', height: 16 }} />
-              <Label value="[E] Salir" fontSize={11} color={Color4.create(0.85, 0.85, 0.85, 1)} uiTransform={{ width: '100%', height: 16 }} />
+              <Label value="🚀  CONTROLES NAVE" fontSize={13} color={Color4.create(1, 0.9, 0.1, 1)} uiTransform={{ width: '100%', height: 22 }} />
+              <Label value="[W A S D]  Volar" fontSize={11} color={Color4.create(0.9, 0.9, 0.9, 1)} uiTransform={{ width: '100%', height: 18 }} />
+              <Label value="[E] Subir    [F] Bajar" fontSize={11} color={Color4.create(0.9, 0.9, 0.9, 1)} uiTransform={{ width: '100%', height: 18 }} />
+              <Label value="[Space]  Bajarse" fontSize={11} color={Color4.create(0.9, 0.9, 0.9, 1)} uiTransform={{ width: '100%', height: 18 }} />
             </UiEntity>
           )}
         </UiEntity>

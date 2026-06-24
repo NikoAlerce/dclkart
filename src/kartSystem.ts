@@ -255,11 +255,12 @@ export function kartMovementSystem(dt: number) {
       const ownerComp = KartOwner.getMutableOrNull(entity)
       if (ownerComp) ownerComp.ownerId = ''
 
-      // Restaurar el collider hijo con el tamaño real del kart
-      // (PHYSICS: otros karts rebotan, POINTER: otros jugadores pueden subirse)
+      // Restaurar la caja de FÍSICA del kart (otros karts rebotan). El clic para subirse
+      // vive en una entidad CL_POINTER aparte (kartClicker) que nunca se borra, así que
+      // no hay que restaurarla acá.
       const colliderEnt = kartColliderMap.get(entity)
       if (colliderEnt !== undefined) {
-        MeshCollider.setBox(colliderEnt as any, ColliderLayer.CL_PHYSICS | ColliderLayer.CL_POINTER)
+        MeshCollider.setBox(colliderEnt as any, ColliderLayer.CL_PHYSICS)
       }
 
 

@@ -64,7 +64,21 @@ export function createKart(config: KartConfig): number {
     position: Vector3.create(0, 0.45 * scaleMult, 0),          // centro de masa del kart
     scale:    Vector3.create(1.5 * scaleMult, 0.9 * scaleMult, 2.5 * scaleMult)        // ancho, alto, largo
   })
-  MeshCollider.setBox(kartCollider, ColliderLayer.CL_PHYSICS | ColliderLayer.CL_POINTER)
+  // Solo FÍSICA: pensada con offset Y=0.45·scale (origen en ruedas). El clic va aparte.
+  MeshCollider.setBox(kartCollider, ColliderLayer.CL_PHYSICS)
+
+  // ── Caja de CLIC para subirse (separada de la física) ───────────────────
+  // El modelo (hijo en Zero) está centrado en el origen del kart; los GLB grandes y
+  // escalados dejaban el viejo target de clic (offset Y=0.45·scale) flotando MUY por
+  // encima del modelo → imposible de clickear. Esta caja va CENTRADA en el modelo
+  // (Y=0) y generosa, solo CL_POINTER, así no afecta la física ni la colisión.
+  const kartClicker = engine.addEntity()
+  Transform.create(kartClicker, {
+    parent:   kartEntity,
+    position: Vector3.Zero(),
+    scale:    Vector3.create(2.0 * scaleMult, 1.6 * scaleMult, 3.0 * scaleMult)
+  })
+  MeshCollider.setBox(kartClicker, ColliderLayer.CL_POINTER)
 
   // ── Datos de físicas iniciales ──────────────────────────────────────────
   // Usa los parámetros del config si están definidos, si no los defaults estándar.
@@ -111,7 +125,7 @@ export function createKart(config: KartConfig): number {
 
   // ── Evento: subirse al kart (registrado en la entidad collider) ───────────
   pointerEventsSystem.onPointerDown(
-    { entity: kartCollider, opts: { button: InputAction.IA_POINTER, hoverText: 'Subirse al Kart' } },
+    { entity: kartClicker, opts: { button: InputAction.IA_POINTER, hoverText: 'Subirse al Kart' } },
     () => {
       const kartData  = KartData.getMutable(kartEntity)
       const ownership = KartOwner.getMutable(kartEntity)

@@ -73,7 +73,7 @@ function kartPos(row: number, col: number): Vector3 {
 //
 // ┌─── EJEMPLO de kart personalizado ──────────────────────────────────────────┐
 // │  { id: 2, modelPath: 'assets/models/kart2.glb',                           │
-// │    spawnPos: Vector3.create(27.3, 9.1, 1.5), spawnRotY: 0.0,                             │
+// │    spawnPos: Vector3.create(-205.0, 65.3, 98.0), spawnRotY: 14.4, scale: 5.10,                             │
 // │    ← 1.5× el tamaño normal                        │
 // │    maxSpeed: 18,          ← más lento (camión)                            │
 // │    acceleration: 10,      ← arranca despacio                              │
@@ -87,16 +87,18 @@ function kartPos(row: number, col: number): Vector3 {
 // ~el piso real (~63) + un margen para que la física los baje. Grilla 5×2 sobre el lote.
 // ⚠️ A AFINAR VISUALMENTE: si quedan corridos/encimados, ajustar XZ acá o en el editor.
 export const KART_CONFIGS: KartConfig[] = [
-  { id: 1,  modelPath: 'assets/models/kart.glb',  spawnPos: Vector3.create(-209, 65, 98),  spawnRotY: 0.0, scale: 1.90},
-  { id: 2,  modelPath: 'assets/models/kart2.glb', spawnPos: Vector3.create(-205, 65, 98),  spawnRotY: 0.0},
-  { id: 3,  modelPath: 'assets/models/kart3.glb', spawnPos: Vector3.create(-201, 65, 98),  spawnRotY: 0.0,
+  { id: 1,  modelPath: 'assets/models/kart.glb',  spawnPos: Vector3.create(-201.8, 64.7, 109.6),  spawnRotY: 20.9, scale: 2.54},
+  { id: 2,  modelPath: 'assets/models/kart2.glb', spawnPos: Vector3.create(-205.0, 65.3, 98.0),  spawnRotY: 14.4, scale: 5.10},
+  { id: 3,  modelPath: 'assets/models/kart3.glb', spawnPos: Vector3.create(-201.0, 71.6, 28.1),  spawnRotY: 282.1, scale: 13.58,
     vehicleType: 'ship',
     maxSpeed: 48, acceleration: 28, friction: 0.55, turnSpeed: 95 },
-  { id: 4,  modelPath: 'assets/models/kart4.glb', spawnPos: Vector3.create(-197, 65, 98),  spawnRotY: 0.0, scale: 3.85, groundOffsetY: 0.22},
-  { id: 5,  modelPath: 'assets/models/kart5.glb', spawnPos: Vector3.create(-193, 65, 98),  spawnRotY: 0.0},
-  { id: 6,  modelPath: 'assets/models/kart6.glb', spawnPos: Vector3.create(-209, 65, 104), spawnRotY: 0.0},
-  { id: 7,  modelPath: 'assets/models/kart7.glb', spawnPos: Vector3.create(-205, 65, 104), spawnRotY: 0.0},
-  { id: 8,  modelPath: 'assets/models/kart8.glb', spawnPos: Vector3.create(-201, 65, 104), spawnRotY: 0.0},
-  { id: 9,  modelPath: 'assets/models/kart9.glb', spawnPos: Vector3.create(-197, 65, 104), spawnRotY: 0.0},
-  { id: 10, modelPath: 'assets/models/kart10.glb',spawnPos: Vector3.create(-76.7, 65.0, 37.6), spawnRotY: 0.0, scale: 1.08, modelYawOffset: -108.3, groundOffsetY: 1.25},
+  { id: 4,  modelPath: 'assets/models/kart4.glb', spawnPos: Vector3.create(-243.2, 70.1, 32.7),  spawnRotY: 293.0, scale: 22.61, groundOffsetY: 0.22,
+    vehicleType: 'ship',
+    maxSpeed: 48, acceleration: 28, friction: 0.55, turnSpeed: 95 },
+  { id: 5,  modelPath: 'assets/models/kart5.glb', spawnPos: Vector3.create(-203.1, 64.5, 106.7),  spawnRotY: 14.2, scale: 2.59},
+  { id: 6,  modelPath: 'assets/models/kart6.glb', spawnPos: Vector3.create(-201.2, 64.5, 112.8), spawnRotY: 14.5, scale: 2.24},
+  { id: 7,  modelPath: 'assets/models/kart7.glb', spawnPos: Vector3.create(-200.2, 64.6, 115.5), spawnRotY: 14.8, scale: 2.25},
+  { id: 8,  modelPath: 'assets/models/kart8.glb', spawnPos: Vector3.create(-199.5, 64.5, 118.4), spawnRotY: 17.1, scale: 2.02},
+  { id: 9,  modelPath: 'assets/models/kart9.glb', spawnPos: Vector3.create(-198.6, 64.5, 121.3), spawnRotY: 13.5, scale: 1.83},
+  { id: 10, modelPath: 'assets/models/kart10.glb',spawnPos: Vector3.create(-207.2, 65.7, 89.6), spawnRotY: 0.0, scale: 1.61, modelYawOffset: -108.3, groundOffsetY: 1.25},
 ]
