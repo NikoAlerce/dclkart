@@ -232,6 +232,8 @@ export function main() {
     armed = false        // declarados más abajo, accedidos vía closure
     videoClock = 0
     pendingSeek = -1     // cancelar cualquier seek pendiente al cambiar de track
+    stallClock = 0       // reiniciar el detector de congelamiento para el track nuevo
+    lastVideoOff = 0
   }
 
   // Reproduce idx guardando el track actual en el historial (next/jump).
@@ -270,6 +272,12 @@ export function main() {
   let lastLoad     = Playlist.loadToken
   let pendingSeek      = -1   // posición buscada, esperando que el video confirme el salto
   let pendingSeekClock = 0
+  // Detector de CONGELAMIENTO: si el video arrancó pero el offset deja de avanzar (se trabó
+  // a mitad), saltamos al siguiente. El watchdog viejo solo cubría "nunca arrancó" y "llegó
+  // al final" → un freeze en el medio quedaba colgado para siempre.
+  const STALL_TIMEOUT  = 7
+  let lastVideoOff     = 0
+  let stallClock       = 0
 
   engine.addSystem((dt: number) => {
     // STREAM nativo activo (admin activó Cast/OBS) → la pantalla muestra el vivo. Cedemos.
@@ -354,6 +362,23 @@ export function main() {
       Playlist.currentTime = off
     }
     Playlist.duration = len
+
+    // ── Detector de congelamiento ──────────────────────────────────────────
+    // Si está reproduciendo (no pausado, sin seek pendiente) y el offset NO avanza
+    // por STALL_TIMEOUT segundos sin haber llegado al final → el video se trabó: saltar.
+    if (len > 0 && pendingSeek < 0 && !Playlist.paused && off < len - 0.3) {
+      if (off > lastVideoOff + 0.05) {
+        lastVideoOff = off
+        stallClock = 0
+      } else {
+        stallClock += dt
+        if (stallClock > STALL_TIMEOUT) {
+          stallClock = 0
+          advanceVideo()   // congelado a mitad → siguiente track
+          return
+        }
+      }
+    }
 
     if (len > 0 && off < len * 0.5) armed = true
     if (armed && len > 0 && off >= len - 0.3) {

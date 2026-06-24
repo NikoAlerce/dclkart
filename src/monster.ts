@@ -196,9 +196,20 @@ export function setupMonster(arbolesEntity?: Entity, screenVideo?: Entity) {
       if (RaceState.isOccupied) return
       if (RaceState.ridingMonster) return // ya estás arriba, no re-teletransportar
       const t = Transform.get(monster)
-      // Aterrizar un poco por ENCIMA del centro de la plataforma → caés sobre ella.
-      const localOffset = Vector3.create(BACK_CX * SCALE, (BACK_Y + 0.4) * SCALE, -0.14 * SCALE)
-      const world = Vector3.add(t.position, Vector3.rotate(localOffset, t.rotation))
+      // Aterrizar sobre el CENTRO de la plataforma (es enorme: ~32×23m), apenas por encima.
+      const localOffset = Vector3.create(BACK_CX * SCALE, (BACK_Y + 0.4) * SCALE, BACK_CZ * SCALE)
+      const base = Vector3.add(t.position, Vector3.rotate(localOffset, t.rotation))
+      // ANTICIPACIÓN: el monstruo se mueve mientras viaja el teleport y mientras caés
+      // (~4 m/s). Apuntamos ADELANTE en su dirección de avance para caer donde la
+      // plataforma ESTARÁ, no donde estaba. walkYaw = facing del modelo − YAW_OFFSET.
+      const worldYaw = 2 * Math.atan2(t.rotation.y, t.rotation.w) * 180 / Math.PI
+      const walkYaw  = (worldYaw - YAW_OFFSET) * Math.PI / 180
+      const LEAD = 4.0
+      const world = Vector3.create(
+        base.x + Math.sin(walkYaw) * LEAD,
+        base.y,
+        base.z + Math.cos(walkYaw) * LEAD
+      )
       movePlayerTo({
         newRelativePosition: world,
         cameraTarget: Vector3.add(world, Vector3.rotate(Vector3.create(0, 0, 5), t.rotation))
