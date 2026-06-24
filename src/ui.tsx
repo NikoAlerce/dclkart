@@ -1,6 +1,6 @@
 import ReactEcs, { Label, ReactEcsRenderer, UiEntity } from '@dcl/sdk/react-ecs'
 import { Color4 } from '@dcl/sdk/math'
-import { engine, Transform } from '@dcl/sdk/ecs'
+import { engine, Transform, PlayerIdentityData } from '@dcl/sdk/ecs'
 import { getPlayer } from '@dcl/sdk/players'
 import { RaceState } from './raceState'
 import { PaintballState, KILLS_TO_WIN } from './paintballState'
@@ -116,6 +116,24 @@ const uiComponent = () => {
                     uiTransform={{ width: 6, height: 6 }}
                     uiBackground={{ color: bot.color }} // punto del color del bot
                   />
+                </UiEntity>
+              )
+            })}
+            {/* Otros jugadores REALES (los que están en tu misma island de comms).
+                DCL agrupa por proximidad: si están lejos, no llegan sus datos y no se
+                pueden mostrar — limitación de plataforma, no del minimapa. */}
+            {Array.from(engine.getEntitiesWith(PlayerIdentityData, Transform)).map(([ent, idData, t]) => {
+              if (ent === engine.PlayerEntity) return null
+              if ((idData.address || '').toLowerCase() === getMyAddr()) return null
+              const ox = Math.max(0, Math.min(W, ((t.position.x - xmin) / (xmax - xmin)) * W))
+              const oy = Math.max(0, Math.min(W, ((zmax - t.position.z) / (zmax - zmin)) * W))
+              return (
+                <UiEntity
+                  key={`pl-${ent}`}
+                  uiTransform={{ positionType: 'absolute', position: { left: ox, top: oy }, width: 14, height: 14, margin: { left: -7, top: -7 }, justifyContent: 'center', alignItems: 'center' }}
+                  uiBackground={{ color: Color4.create(0.05, 0.05, 0.05, 0.95) }} // aro oscuro
+                >
+                  <UiEntity uiTransform={{ width: 9, height: 9 }} uiBackground={{ color: Color4.create(0.3, 0.7, 1, 1) }} />
                 </UiEntity>
               )
             })}
