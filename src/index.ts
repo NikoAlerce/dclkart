@@ -25,13 +25,14 @@ export let paintballSpawn_4: Entity
 export let paintballSpawn_5: Entity
 export let paintballSpawn_6: Entity
 export let paintballSpawn_7: Entity
+export let trackEntity: Entity
 
 export function main() {
   // 0. Networking: elección de host para sincronizar NPCs (monstruo, bots, power-ups)
   setupNet()
 
   // 1. Track GLB
-  const trackEntity = engine.addEntity()
+  trackEntity = engine.addEntity()
   spawnedModelEntities.add(trackEntity)
   GltfContainer.create(trackEntity, {
     src: 'assets/models/track.glb',

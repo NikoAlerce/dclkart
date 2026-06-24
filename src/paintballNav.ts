@@ -8,6 +8,8 @@
 import { engine, Entity, Transform, Raycast, RaycastResult, RaycastQueryType, ColliderLayer, PlayerIdentityData, GltfContainer } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
 import { ARENA_BOUNDS, ARENA_Y_SAMPLE } from './paintballArena'
+import { trackEntity } from './index'
+import { isChildOf } from './utils'
 
 type NavNode = { x: number; y: number; z: number; edges: number[] }
 
@@ -90,8 +92,7 @@ function recordCell(ix: number, iz: number, e: Entity) {
     if (!h.position) continue
     if (h.entityId !== undefined) {
       if (PlayerIdentityData.has(h.entityId as Entity)) continue
-      const gltf = GltfContainer.getOrNull(h.entityId as Entity)
-      if (!gltf || !gltf.src || !gltf.src.toLowerCase().includes('track.glb')) {
+      if (h.entityId !== trackEntity && !isChildOf(h.entityId as Entity, trackEntity)) {
         continue
       }
     }

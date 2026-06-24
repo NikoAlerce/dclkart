@@ -4,6 +4,7 @@ import { engine, Transform } from '@dcl/sdk/ecs'
 import { getPlayer } from '@dcl/sdk/players'
 import { RaceState } from './raceState'
 import { PaintballState } from './paintballState'
+import { getBotsForRadar } from './paintballBots'
 import { startPaintball, joinPaintball, exitPaintball } from './paintball'
 import {
   Playlist, OWNER_ADDRESS, PlaylistLibrary, selectLibrary,
@@ -80,9 +81,9 @@ const uiComponent = () => {
         const pb = ps.inGame
         const img = pb ? 'images/paintball_minimap.png' : 'images/minimap.png'
         // Ventanas world-XZ EXACTAS con las que se generaron las imágenes (impreso por
-        // make_*minimap.py). Track: X[-537.9,277.9] Z[-204.6,611.2]. Paintball: -170..170 / 245..585.
-        const xmin = pb ? -170 : -537.9, xmax = pb ? 170 : 277.9
-        const zmin = pb ? 245 : -204.6, zmax = pb ? 585 : 611.2
+        // make_*minimap.py). Track: X[-379.0,816.0] Z[-423.6,771.3]. Paintball: -280..120 / 200..600.
+        const xmin = pb ? -280.0 : -379.0, xmax = pb ? 120.0 : 816.0
+        const zmin = pb ? 200.0 : -423.6, zmax = pb ? 600.0 : 771.3
         const wx = RaceState.isOccupied ? RaceState.kartPositionX : (playerTransform ? playerTransform.position.x : xmin)
         const wz = RaceState.isOccupied ? RaceState.kartPositionZ : (playerTransform ? playerTransform.position.z : zmin)
         const W = 320
@@ -92,6 +93,26 @@ const uiComponent = () => {
         return (
           <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 24, right: 24 }, width: W, height: W }}
             uiBackground={{ textureMode: 'stretch', texture: { src: img } }}>
+            {/* Puntos de los bots en el radar */}
+            {getBotsForRadar().map((bot, idx) => {
+              if (!bot.isAlive) return null
+              const bx = bot.position.x
+              const bz = bot.position.z
+              const bdotX = Math.max(0, Math.min(W, ((bx - xmin) / (xmax - xmin)) * W))
+              const bdotY = Math.max(0, Math.min(W, ((zmax - bz) / (zmax - zmin)) * W))
+              return (
+                <UiEntity
+                  key={idx}
+                  uiTransform={{ positionType: 'absolute', position: { left: bdotX, top: bdotY }, width: 12, height: 12, margin: { left: -6, top: -6 }, justifyContent: 'center', alignItems: 'center' }}
+                  uiBackground={{ color: Color4.create(0.1, 0.1, 0.1, 0.95) }} // aro oscuro de contraste
+                >
+                  <UiEntity
+                    uiTransform={{ width: 6, height: 6 }}
+                    uiBackground={{ color: bot.color }} // punto del color del bot
+                  />
+                </UiEntity>
+              )
+            })}
             {/* aro blanco de contraste */}
             <UiEntity uiTransform={{ positionType: 'absolute', position: { left: dotX, top: dotY }, width: 20, height: 20, margin: { left: -10, top: -10 } }}
               uiBackground={{ color: Color4.create(1, 1, 1, 0.9) }} />

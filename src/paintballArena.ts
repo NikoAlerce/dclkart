@@ -6,15 +6,16 @@
 import { engine, Transform, Raycast, RaycastResult, RaycastQueryType, ColliderLayer, Entity, PointerEvents, GltfContainer } from '@dcl/sdk/ecs'
 import { Vector3, Color4 } from '@dcl/sdk/math'
 import { WORLD_Y_OFFSET } from './spawnConfig'
+import { trackEntity } from './index'
+import { isChildOf } from './utils'
 
 // ── Colores de equipo (T = naranja, CT = celeste) ──────────────────────────────
 export const TEAM_COLOR_T = Color4.create(1.0, 0.55, 0.1, 1)
 export const TEAM_COLOR_CT = Color4.create(0.2, 0.6, 1.0, 1)
 
-// Piso REAL del arena: los datos del PLAYER (DCL physics) muestran Y≈72-81 caminando.
-// El 108 anterior estaba MAL (mandaba spawns/nav/calibración a techos → bots en el
-// cielo / atravesando pisos elevados). El piso real ronda 72-81.
-const FALLBACK_FLOOR_Y = 23 + WORLD_Y_OFFSET // ≈ 73
+// Piso REAL del arena: los datos del PLAYER (DCL physics) muestran Y≈108-117 caminando.
+// El piso real ronda 108.
+const FALLBACK_FLOOR_Y = 58 + WORLD_Y_OFFSET // ≈ 108
 
 export const ArenaCalibration = {
   floorY: FALLBACK_FLOOR_Y, // promedio aprox (uso informativo)
@@ -110,8 +111,7 @@ export function setupSpawnCalibration() {
           if ((h.entityId as Entity) === engine.PlayerEntity) continue
           
           if (!forceFallback) {
-            const gltf = GltfContainer.getOrNull(h.entityId as Entity)
-            if (!gltf || !gltf.src || !gltf.src.includes('track.glb')) {
+            if (h.entityId !== trackEntity && !isChildOf(h.entityId as Entity, trackEntity)) {
               continue
             }
           }

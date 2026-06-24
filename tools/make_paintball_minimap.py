@@ -8,7 +8,7 @@ g = importlib.util.module_from_spec(spec); spec.loader.exec_module(g)
 
 # Transform del track entity en el mundo
 TX, TZ = -88.0, 38.19
-def to_world(lx, lz): return (TX - lx, TZ + lz)
+def to_world(lx, lz): return (TX + lx, TZ + lz)
 
 CT = {5120: ('b', 1), 5121: ('B', 1), 5122: ('h', 2), 5123: ('H', 2), 5125: ('I', 4), 5126: ('f', 4)}
 
@@ -72,10 +72,10 @@ print('leyendo track.glb...'); track = collect_tris('assets/models/track.glb')
 print('leyendo lake.glb...');  lake  = collect_tris('assets/models/lake.glb')
 
 # Paintball bounds (zoomed and centered around Paintball Arena)
-# X de -170 a 170, Z de 245 a 585 (cuadrado de 340m de lado)
-xmin, xmax = -170.0, 170.0
-zmin, zmax = 245.0, 585.0
-W = H = 340.0
+# X de -280 a 120, Z de 200 a 600 (cuadrado de 400m de lado)
+xmin, xmax = -280.0, 120.0
+zmin, zmax = 200.0, 600.0
+W = H = 400.0
 
 # ── Rasterizar (supersample x2 → downscale a 512 POT) ──
 SS = 2; maxpx = 512

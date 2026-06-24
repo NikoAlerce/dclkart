@@ -9,8 +9,10 @@ import { PaintColor, nextBotPaint } from './paintballColors'
 import { isHost, getMyId, SYNC_IDS } from './net'
 import { pbBus, PB_MSG, BotDamageMsg, BotKilledMsg, BotShotMsg } from './paintballNet'
 import { FFA_SPAWNS, TEAM_SPAWN_T, TEAM_SPAWN_CT, ARENA_FLOOR_Y, ArenaCalibration } from './paintballArena'
-import { isNavReady, findPath } from './paintballNav'
+import { isNavReady, findPath, groundYAt } from './paintballNav'
 import { playShootAt } from './paintballAudio'
+import { trackEntity } from './index'
+import { isChildOf } from './utils'
 
 // ─── Bots compartidos (host-authoritative) ────────────────────────────────────
 // Todos los clientes crean los mismos bots con un enumId estable y syncEntity sobre
@@ -196,17 +198,7 @@ export function spawnBots() {
 
     BotState.create(botEntity, { health: BOT_MAX_HEALTH })
 
-    // Raycast hacia abajo desde APENAS arriba de los pies (+2.2) para seguir el piso
-    // irregular como la física del jugador: el primer hit hacia abajo es el suelo bajo
-    // el bot (o un escalón ≤2m). Origen bajo = NO agarra techos. maxDistance corto.
-    Raycast.createOrReplace(botEntity, {
-      direction: { $case: 'globalDirection', globalDirection: Vector3.Down() },
-      maxDistance: 5.0,
-      queryType: RaycastQueryType.RQT_QUERY_ALL,
-      continuous: true,
-      collisionMask: ColliderLayer.CL_PHYSICS,
-      originOffset: Vector3.create(0, 2.2, 0)
-    })
+    // El raycast de piso se crea y se lee en botSystem cada frame para seguir el movimiento dinámico.
 
     // Sincronizar posición + vida del bot. Igual que los karts: todos crean la
     // entidad con el mismo enumId; el host es quien la maneja, el resto la recibe.
@@ -565,31 +557,50 @@ function botSystem(dt: number) {
     const distToPlayer = np ? np.dist : Infinity
     const targetAddr = np ? np.address : ''
 
-    // ── Altura: seguir el PISO IRREGULAR con el raycast hacia abajo ─────────────
-    // Tomamos el hit MÁS ALTO (track.glb, o cualquier no-árbol) que esté por debajo del
-    // origen del ray (pies+2.2). Eso es el suelo justo bajo el bot → sigue rampas y
-    // escalones suave, sin agarrar techos (el ray arranca a la altura del bot) y sin
-    // perseguir un nivel donde no hay piso (lo que causaba el hundirse/saltar).
+    // ── Altura: seguir el PISO IRREGULAR con Navmesh + Raycast fallback ─────────
     let groundY: number | null = null
+
+    // 1. Intentar obtener altura del navmesh (rápido y exacto en multinivel)
+    if (isNavReady()) {
+      groundY = groundYAt(botPos.x, botPos.z, botPos.y)
+    }
+
+    // 2. Si el navmesh no está listo o no cubre este punto, usar raycast vertical
     const floorRay = RaycastResult.getOrNull(bot.entity)
     if (floorRay && floorRay.hits.length > 0) {
-      const rayTop = botPos.y + 2.2 // origen del ray (originOffset)
+      const rayTop = botPos.y + 2.2
+      let bestRayY: number | null = null
       for (const hit of floorRay.hits) {
         if (!hit.position || isNaN(hit.position.y)) continue
-        if (hit.position.y > rayTop + 0.5) continue // por las dudas, ignorar lo de arriba
-        const gltf = hit.entityId !== undefined ? GltfContainer.getOrNull(hit.entityId as Entity) : null
+        if (hit.position.y > rayTop + 0.5) continue // ignorar lo que está arriba de la cabeza
+
+        const hasTrack = hit.entityId !== undefined && (hit.entityId === trackEntity || isChildOf(hit.entityId as Entity, trackEntity))
+        const gltf = hit.entityId !== undefined && !hasTrack ? GltfContainer.getOrNull(hit.entityId as Entity) : null
         const isTree = gltf && gltf.src && gltf.src.includes('arboles.glb')
         if (isTree) continue
 
-        // FILTRAR HITS VIEJOS (TELETRANSPORTE): si el hit está horizontalmente muy lejos
-        // de la posición actual del bot, es de un raycast anterior a la teleportación.
         const dx = hit.position.x - botPos.x
         const dz = hit.position.z - botPos.z
-        if (dx * dx + dz * dz > 25.0) continue // más de 5 metros de distancia horizontal
+        if (dx * dx + dz * dz > 25.0) continue // filtrar hits viejos de teleportes
 
-        if (groundY === null || hit.position.y > groundY) groundY = hit.position.y
+        if (bestRayY === null || hit.position.y > bestRayY) bestRayY = hit.position.y
+      }
+      if (bestRayY !== null) {
+        // Si el navmesh falló, usamos el raycast como altura principal
+        if (groundY === null) groundY = bestRayY
       }
     }
+
+    // Recrear raycast para el próximo frame en la posición actual del bot (resuelve el bug de continuous raycast)
+    Raycast.createOrReplace(bot.entity, {
+      direction: { $case: 'globalDirection', globalDirection: Vector3.Down() },
+      maxDistance: 6.0,
+      queryType: RaycastQueryType.RQT_QUERY_ALL,
+      continuous: false,
+      collisionMask: ColliderLayer.CL_PHYSICS,
+      originOffset: Vector3.create(0, 2.2, 0)
+    })
+
     if (groundY !== null) {
       const diff = groundY - botPos.y
       if (Math.abs(diff) > 12) botPos.y = groundY         // recién spawneó muy lejos
@@ -851,4 +862,24 @@ export function getClosestBot(playerPos: Vector3): { entity: Entity; name: strin
   }
 
   return closestBot
+}
+
+export function getBotsForRadar() {
+  const phase = PaintballState.matchPhase
+  const botsActive = phase === 2 && PaintballState.matchBots
+  if (!botsActive) return []
+
+  return bots.map(bot => {
+    const transform = Transform.getOrNull(bot.entity)
+    const bs = BotState.getOrNull(bot.entity)
+    const isAtPark = transform ? (Math.abs(transform.position.x - 0) < 2.0 && Math.abs(transform.position.z - 400) < 2.0) : true
+    const isAlive = !!(transform && bs && bs.health > 0 && !isAtPark)
+    
+    return {
+      name: bot.name,
+      position: transform ? transform.position : Vector3.Zero(),
+      color: bot.paint.emissive,
+      isAlive
+    }
+  })
 }
