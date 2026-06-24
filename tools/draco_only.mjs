@@ -17,8 +17,11 @@ const io = new NodeIO()
 const dir = process.argv[2] || 'assets/models'
 const files = readdirSync(dir).filter(f => f.toLowerCase().endsWith('.glb'))
 
-// Excluir los que están en .dclignore y no se deployean igual
-const SKIP = new Set(['trees.glb'])
+// Excluir los que están en .dclignore y no se deployean igual.
+// track.glb NO se comprime con Draco: la cuantización de vértices degrada la colisión
+// del PASTO (malla grande y plana → micro-huecos donde caés/clipeás). Sin Draco la
+// colisión es exacta (igual que en el preview). Cuesta ~+15MB pero el track es caminable.
+const SKIP = new Set(['trees.glb', 'track.glb'])
 const included = files.filter(f => !SKIP.has(f) && !f.startsWith('paintballspawn'))
 
 console.log(`Aplicando Draco a ${included.length} GLBs en "${dir}"...`)
