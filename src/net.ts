@@ -14,6 +14,7 @@ import { myProfile } from '@dcl/sdk/network'
 let myId = ''      // identificador para MENSAJERÍA (userId del perfil) — lo usa el paintball
 let myAddr = ''    // address (lowercase) para ELECCIÓN DE HOST — consistente entre clientes
 let hostId = ''
+let soloInScene = true  // ¿soy el único jugador? → soy host sí o sí (no depende de matchear address)
 let scanAccum = 0
 const RESCAN_INTERVAL = 2.0
 
@@ -45,12 +46,18 @@ function rescan() {
   myAddr = (me?.address || myProfile?.userId || '').toLowerCase()
 
   let lowest = myAddr
+  let total = 0   // cantidad de jugadores reales presentes (con address válida)
   for (const [, idData] of engine.getEntitiesWith(PlayerIdentityData)) {
     const a = (idData.address || '').toLowerCase()
     if (!a || a.startsWith('bot_')) continue // ignorar bots locales del paintball
+    total++
     if (lowest === '' || a < lowest) lowest = a
   }
   hostId = lowest
+  // Si hay 0 o 1 jugador en la escena, ese soy YO → soy host SIEMPRE, sin depender de que
+  // myAddr (que puede salir del userId) coincida con la address de mi PlayerIdentityData.
+  // Sin esto, un guest o un userId≠address quedaba "sin host" → NPCs (monstruo/bots) quietos.
+  soloInScene = total <= 1
 }
 
 function netSystem(dt: number) {
@@ -63,7 +70,7 @@ function netSystem(dt: number) {
 
 /** ¿Este cliente es el host que simula los NPCs? (true también si estás solo) */
 export function isHost(): boolean {
-  return myAddr === '' || hostId === myAddr
+  return soloInScene || myAddr === '' || hostId === myAddr
 }
 
 export function getMyId(): string {
