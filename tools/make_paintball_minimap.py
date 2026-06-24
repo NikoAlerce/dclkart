@@ -8,7 +8,7 @@ g = importlib.util.module_from_spec(spec); spec.loader.exec_module(g)
 
 # Transform del track entity en el mundo
 TX, TZ = -88.0, 38.19
-def to_world(lx, lz): return (TX + lx, TZ + lz)
+def to_world(lx, lz): return (TX - lx, TZ + lz)
 
 CT = {5120: ('b', 1), 5121: ('B', 1), 5122: ('h', 2), 5123: ('H', 2), 5125: ('I', 4), 5126: ('f', 4)}
 

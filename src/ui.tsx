@@ -81,8 +81,8 @@ const uiComponent = () => {
         const pb = ps.inGame
         const img = pb ? 'images/paintball_minimap.png' : 'images/minimap.png'
         // Ventanas world-XZ EXACTAS con las que se generaron las imágenes (impreso por
-        // make_*minimap.py). Track: X[-379.0,816.0] Z[-423.6,771.3]. Paintball: -280..120 / 200..600.
-        const xmin = pb ? -280.0 : -379.0, xmax = pb ? 120.0 : 816.0
+        // make_*minimap.py). Track: X[-992.0,203.0] Z[-423.6,771.3]. Paintball: -280..120 / 200..600.
+        const xmin = pb ? -280.0 : -992.0, xmax = pb ? 120.0 : 203.0
         const zmin = pb ? 200.0 : -423.6, zmax = pb ? 600.0 : 771.3
         const wx = RaceState.isOccupied ? RaceState.kartPositionX : (playerTransform ? playerTransform.position.x : xmin)
         const wz = RaceState.isOccupied ? RaceState.kartPositionZ : (playerTransform ? playerTransform.position.z : zmin)
