@@ -31,6 +31,13 @@ export const DEFAULT_PHYSICS = {
   turnSpeed:    75,
 }
 
+// Tope del factor de escala aplicado a la FÍSICA (velocidad/aceleración/empuje vertical).
+// Un vehículo N× más grande se mueve N× más rápido para mantener el feel, pero como el
+// mundo NO se escala, se limita acá para que las naves enormes (escala 13-22) no queden
+// incontrolables. La GEOMETRÍA (collider, cámara, sensores) NO usa este tope: respeta el
+// tamaño visual real. Karts (escala ≤ ~5) quedan por debajo del tope → sin recorte.
+export const PHYS_SCALE_CAP = 6.0
+
 // ─── Geometría de la grilla de largada ───────────────────────────────────────
 // El kart original estaba en (366.3, 8.6, 316.2) con rotación Y=50°.
 //
@@ -89,7 +96,7 @@ function kartPos(row: number, col: number): Vector3 {
 export const KART_CONFIGS: KartConfig[] = [
   { id: 1,  modelPath: 'assets/models/kart.glb',  spawnPos: Vector3.create(-201.8, 64.7, 109.6),  spawnRotY: 20.9, scale: 2.54},
   { id: 2,  modelPath: 'assets/models/kart2.glb', spawnPos: Vector3.create(-205.0, 65.3, 98.0),  spawnRotY: 14.4, scale: 5.10},
-  { id: 3,  modelPath: 'assets/models/kart3.glb', spawnPos: Vector3.create(-201.0, 71.6, 28.1),  spawnRotY: 282.1, scale: 13.58,
+  { id: 3,  modelPath: 'assets/models/kart3.glb', spawnPos: Vector3.create(-201.0, 71.6, 28.1),  spawnRotY: 282.1, scale: 13.58, groundOffsetY: 0.34,
     vehicleType: 'ship',
     maxSpeed: 48, acceleration: 28, friction: 0.55, turnSpeed: 95 },
   { id: 4,  modelPath: 'assets/models/kart4.glb', spawnPos: Vector3.create(-243.2, 70.1, 32.7),  spawnRotY: 293.0, scale: 22.61, groundOffsetY: 0.22,

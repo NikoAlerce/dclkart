@@ -459,8 +459,11 @@ export function kartMovementSystem(dt: number) {
         if (Math.abs(mutableKart.shipVertSpeed) < 0.05) mutableKart.shipVertSpeed = 0
       }
 
-      // Altura mínima: la nave no puede atravesar el suelo
-      const minY = (lastKnownGroundY || 5.0) + 1.5 * scaleMult
+      // Altura mínima: la nave puede BAJAR hasta apoyar su panza en el piso. Antes era
+      // 1.5·scaleMult (≈20-34m para naves grandes → nunca llegaban al piso). Ahora usa
+      // groundOffsetY·scaleMult = distancia origen→panza (igual criterio que apoyar un kart),
+      // así la nave aterriza de verdad sin hundirse. Usa scaleMult REAL (geometría, no topeada).
+      const minY = (lastKnownGroundY || 5.0) + mutableKart.groundOffsetY * scaleMult
       transform.position.y = Math.max(minY, transform.position.y + mutableKart.shipVertSpeed * dt)
 
       // Guardar checkpoint seguro
