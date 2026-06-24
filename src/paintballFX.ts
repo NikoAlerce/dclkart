@@ -1,6 +1,6 @@
 import { engine, Transform, MeshRenderer, Material, Billboard, Entity } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion, Color4 } from '@dcl/sdk/math'
-import { WORLD_Y_OFFSET } from './spawnConfig'
+import { ArenaCalibration } from './paintballArena'
 
 type ParticleData = {
   entity: Entity
@@ -202,8 +202,8 @@ function particleSystem(dt: number) {
       t.position.y += p.velocity.y * dt
       t.position.z += p.velocity.z * dt
 
-      // Rebote simple en el piso
-      const floorY = 12.0 + WORLD_Y_OFFSET
+      // Rebote simple en el piso (altura calibrada del arena en runtime)
+      const floorY = ArenaCalibration.floorY
       if (t.position.y < floorY) {
         t.position.y = floorY
         p.velocity = Vector3.create(p.velocity.x * 0.8, Math.abs(p.velocity.y) * 0.5, p.velocity.z * 0.8)

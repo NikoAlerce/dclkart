@@ -1,14 +1,15 @@
 import { engine, Entity, Transform, AvatarShape, PlayerIdentityData, Raycast, RaycastResult, RaycastQueryType, ColliderLayer, GltfContainer, Schemas, MeshRenderer, Material, Animator } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion, Color4, Color3 } from '@dcl/sdk/math'
 import { syncEntity } from '@dcl/sdk/network'
-import { receivePaintballHit } from './paintball'
-import { PaintballState, COMBO_WINDOW } from './paintballState'
+import { receivePaintballHit, getTeamOf } from './paintball'
+import { PaintballState, COMBO_WINDOW, KILLS_TO_WIN } from './paintballState'
 import { spawnLaser } from './paintballLasers'
 import { spawnBotExplosion, spawnMuzzleFlash } from './paintballFX'
 import { PaintColor, nextBotPaint } from './paintballColors'
 import { isHost, getMyId, SYNC_IDS } from './net'
+import { getPlayer } from '@dcl/sdk/players'
 import { pbBus, PB_MSG, BotDamageMsg, BotKilledMsg, BotShotMsg } from './paintballNet'
-import { FFA_SPAWNS, TEAM_SPAWN_T, TEAM_SPAWN_CT, ARENA_FLOOR_Y, ArenaCalibration } from './paintballArena'
+import { FFA_SPAWNS, TEAM_SPAWN_T, TEAM_SPAWN_CT, TEAM_COLOR_T, TEAM_COLOR_CT, ARENA_FLOOR_Y, ArenaCalibration } from './paintballArena'
 import { isNavReady, findPath, groundYAt } from './paintballNav'
 import { playShootAt } from './paintballAudio'
 import { trackEntity } from './index'
@@ -28,12 +29,11 @@ type BotData = {
   shootCD: number
   moveTimer: number
   targetPos: Vector3
-  isJumping: boolean
-  jumpTime: number
-  jumpCooldown: number
   shootRayEntity: Entity
   moveRayEntity: Entity // raycast horizontal para evitar atravesar paredes
   visualEntity: Entity // AvatarShape va acá (top-level, NO sincronizada) y copia el Transform del bot
+  markerEntity: Entity // orbe flotante; en modo equipos se tiñe del color del equipo
+  team: number // 1 T, 2 CT (determinístico por índice; 0 = FFA/sin equipo)
   wallTurnDir: number // sentido de giro al pegar contra una pared (+1/-1)
   wallStuckTimer: number
   stuckX: number // detección de "trabado": última posición de referencia + timer
@@ -82,6 +82,7 @@ const BOT_SHOOT_RANGE = 32
 const BOT_PARK = Vector3.create(0, 4, 400)
 
 let _botLogTimer = 0  // timer para imprimir posiciones
+let lastMarkerMode = -1  // -1 sin set, 0 FFA (color de pintura), 1 equipos (color del equipo)
 
 // Puntos de aparición de los bots: ahora dentro del mapa de Counter (calibrar en
 // paintballArena.ts). Mezcla de spawns FFA + las dos bases de equipo.
@@ -124,6 +125,9 @@ export function setupBots() {
   pbBus.on(PB_MSG.botKilled, (m: BotKilledMsg) => {
     const color = Color4.create(m.r, m.g, m.b, 1)
     spawnBotExplosion(Vector3.create(m.pos.x, m.pos.y, m.pos.z), color)
+    // Matar un bot da SCORE PERSONAL + combo (creditKill), pero NO mueve el marcador
+    // de equipo: como los bots respawnean cada 4s, contarlos al cap (30) dejaría ganar
+    // la ronda farmeando bots. El marcador T vs CT lo deciden solo los kills PvP.
     if (m.by === getMyId()) creditKill(m.name, color)
   })
 
@@ -214,12 +218,11 @@ export function spawnBots() {
       shootCD: 3.0 + Math.random() * 2.0,
       targetPos: Vector3.Zero(),
       moveTimer: 0,
-      isJumping: false,
-      jumpTime: 0,
-      jumpCooldown: 2.0 + Math.random() * 3.0,
       shootRayEntity: shootRayEntity,
       moveRayEntity: moveRayEntity,
       visualEntity: visualEntity,
+      markerEntity: marker,
+      team: i < BOT_COUNT / 2 ? 1 : 2, // mitad T, mitad CT (determinístico → igual en todos los clientes)
       wallTurnDir: i % 2 === 0 ? 1 : -1,
       wallStuckTimer: 0,
       stuckX: 0, stuckZ: 0, stuckT: 0,
@@ -250,6 +253,23 @@ export function clearBots() {
 // todos ven a los bots moviéndose desde la posición sincronizada.
 function botVisualSystem() {
   const BOT_SCALE = 1.4
+
+  // Color del orbe marcador: en modo equipos = color del equipo del bot (para
+  // distinguir aliados de enemigos), en FFA = su color de pintura. Solo se reaplica
+  // cuando cambia el modo (no cada frame). Corre en todos los clientes.
+  const markerMode = PaintballState.matchMode === 1 ? 1 : 0
+  if (markerMode !== lastMarkerMode) {
+    lastMarkerMode = markerMode
+    for (const b of bots) {
+      const col = markerMode === 1 ? (b.team === 1 ? TEAM_COLOR_T : TEAM_COLOR_CT) : b.paint.emissive
+      Material.setPbrMaterial(b.markerEntity, {
+        albedoColor: col,
+        emissiveColor: Color3.create(col.r, col.g, col.b),
+        emissiveIntensity: 3.0
+      })
+    }
+  }
+
   for (const bot of bots) {
     const src = Transform.getOrNull(bot.entity)
     const vis = Transform.getMutableOrNull(bot.visualEntity)
@@ -297,11 +317,23 @@ function botEntityById(id: number): Entity | null {
   return bots[id] ? bots[id].entity : null
 }
 
+/** Equipo del bot por índice (1 T, 2 CT, 0 FFA/sin equipo). */
+export function getBotTeam(index: number): number {
+  return bots[index] ? bots[index].team : 0
+}
+
 // Cambia la vida del bot en el dato local Y en el componente sincronizado.
 function setBotHealth(bot: BotData, h: number) {
   bot.health = h
   const bs = BotState.getMutableOrNull(bot.entity)
   if (bs) bs.health = h
+}
+
+// Color "de marca" del bot: color de equipo en modo T vs CT, su pintura random en FFA.
+// Lo usan los disparos y la explosión (van por red → todos renderizan el mismo color).
+function botColor(bot: BotData): Color4 {
+  if (PaintballState.matchMode === 1) return bot.team === 1 ? TEAM_COLOR_T : TEAM_COLOR_CT
+  return bot.paint.emissive
 }
 
 // ── Daño autoritativo (solo host) ──────────────────────────────────────────────
@@ -313,14 +345,15 @@ function applyBotDamage(botId: number, by: string) {
   if (bot.health <= 0) {
     bot.respawnCD = 4.0
     const pos = Transform.get(bot.entity).position
+    const col = botColor(bot)
     const msg: BotKilledMsg = {
       bot: botId,
       by,
       name: bot.name,
       pos: { x: pos.x, y: pos.y, z: pos.z },
-      r: bot.paint.emissive.r,
-      g: bot.paint.emissive.g,
-      b: bot.paint.emissive.b
+      r: col.r,
+      g: col.g,
+      b: col.b
     }
     // Esconder el bot: scale 0 en la entidad LÓGICA (para que el radar/disparos lo
     // ignoren) + parquearlo bajo tierra. El AvatarShape (entidad visual aparte) lo
@@ -362,9 +395,12 @@ export function creditKill(botName: string, color: Color4) {
   PaintballState.killFeed.unshift({ text: `💥  ${botName}  +${points}`, color, t: 4.0 })
   if (PaintballState.killFeed.length > 4) PaintballState.killFeed.length = 4
 
-  if (PaintballState.kills >= 15) { // KILLS_TO_WIN
-    PaintballState.gameOver = true
-    PaintballState.gameMsg = '🏆  You won the round!'
+  // Fin de ronda FFA: en vez de marcar game over LOCAL (desincronizaba — el ganador
+  // veía "ganaste" mientras los demás seguían), le avisamos al host que llegué al cap.
+  // El host cierra la ronda (phase 3) para todos y el fin se dispara parejo vía
+  // matchPhase en paintball.ts. En modo equipos el cap personal no termina nada.
+  if (PaintballState.matchMode === 0 && PaintballState.kills >= KILLS_TO_WIN) {
+    pbBus.emit(PB_MSG.ffaWin, { name: getPlayer()?.name || 'Player' })
   }
 }
 
@@ -382,9 +418,19 @@ function collectPlayers(): PlayerRef[] {
   return out
 }
 
-function nearestPlayer(players: PlayerRef[], botPos: Vector3): { pos: Vector3; address: string; dist: number } | null {
+function nearestPlayer(players: PlayerRef[], botPos: Vector3, botTeam: number): { pos: Vector3; address: string; dist: number } | null {
   let best: { pos: Vector3; address: string; dist: number } | null = null
   for (const p of players) {
+    // Modo equipos: el bot solo apunta al bando RIVAL. Salta a aliados (mismo equipo)
+    // y a jugadores aún sin asignar (team 0), para no enjambrar a alguien que recién
+    // entró y todavía no recibió su equipo del host.
+    // Ojo identidad: collectPlayers usa getMyId() (userId) para el jugador LOCAL pero
+    // el roster se indexa por address → para mí uso PaintballState.myTeam directo (si
+    // userId≠address, getTeamOf(userId) fallaría y los bots me ignorarían).
+    if (botTeam !== 0) {
+      const pteam = p.address === getMyId() ? PaintballState.myTeam : getTeamOf(p.address)
+      if (pteam === 0 || pteam === botTeam) continue
+    }
     const dx = p.pos.x - botPos.x
     const dy = p.pos.y - botPos.y
     const dz = p.pos.z - botPos.z
@@ -436,9 +482,11 @@ function botSystem(dt: number) {
 
   // Flanco de subida: al activarse, resetear vida/estado y mostrar los bots en spawns.
   if (botsActive && !lastBotsActive) {
+    const teamMode = PaintballState.matchMode === 1
     for (let i = 0; i < bots.length; i++) {
       const bot = bots[i]
-      const sp = BOT_SPAWN_POINTS[i % BOT_SPAWN_POINTS.length]
+      // En equipos cada bot nace en la base de SU equipo; en FFA reparte por índice.
+      const sp = teamMode ? (bot.team === 1 ? TEAM_SPAWN_T : TEAM_SPAWN_CT) : BOT_SPAWN_POINTS[i % BOT_SPAWN_POINTS.length]
       setBotHealth(bot, BOT_MAX_HEALTH)
       bot.respawnCD = 0
       bot.alertState = 'patrol'
@@ -491,13 +539,14 @@ function botSystem(dt: number) {
 
       // ~7% de impacto si no fue bloqueado por cobertura (antes 20% = te acribillaban)
       const hitAddr = !isBlocked && Math.random() > 0.93 ? shot.targetAddr : ''
+      const col = botColor(bot)
       const msg: BotShotMsg = {
         bot: getBotIndex(bot.entity),
         from: { x: shot.from.x, y: shot.from.y, z: shot.from.z },
         to: { x: hitPos.x, y: hitPos.y, z: hitPos.z },
-        r: bot.paint.emissive.r,
-        g: bot.paint.emissive.g,
-        b: bot.paint.emissive.b,
+        r: col.r,
+        g: col.g,
+        b: col.b,
         hit: hitAddr,
         normal: { x: hitNormal.x, y: hitNormal.y, z: hitNormal.z }
       }
@@ -515,7 +564,10 @@ function botSystem(dt: number) {
       bot.respawnCD -= dt
       if (bot.respawnCD <= 0) {
         setBotHealth(bot, BOT_MAX_HEALTH)
-        const spawnPt = BOT_SPAWN_POINTS[Math.floor(Math.random() * BOT_SPAWN_POINTS.length)]
+        // En equipos respawnea en la base de su equipo; en FFA en un punto al azar.
+        const spawnPt = PaintballState.matchMode === 1
+          ? (bot.team === 1 ? TEAM_SPAWN_T : TEAM_SPAWN_CT)
+          : BOT_SPAWN_POINTS[Math.floor(Math.random() * BOT_SPAWN_POINTS.length)]
         const mutableTransform = Transform.getMutable(bot.entity)
         mutableTransform.position = Vector3.create(
           spawnPt.x + (Math.random() - 0.5) * 4,
@@ -551,8 +603,9 @@ function botSystem(dt: number) {
       }
     }
 
-    // ── Jugador más cercano (de TODOS) como objetivo ──
-    const np = nearestPlayer(players, botPos)
+    // ── Jugador más cercano como objetivo (en equipos: solo del bando rival) ──
+    const botTeam = PaintballState.matchMode === 1 ? bot.team : 0
+    const np = nearestPlayer(players, botPos, botTeam)
     const playerPos = np ? np.pos : botPos
     const distToPlayer = np ? np.dist : Infinity
     const targetAddr = np ? np.address : ''
@@ -601,9 +654,13 @@ function botSystem(dt: number) {
     })
 
     if (groundY !== null) {
+      if (groundY < 73.5) groundY = 73.5
       const diff = groundY - botPos.y
       if (Math.abs(diff) > 12) botPos.y = groundY         // recién spawneó muy lejos
       else botPos.y += diff * Math.min(1, dt * 10)        // sigue el terreno, suave
+    }
+    if (botPos.y < 73.5) {
+      botPos.y = 73.5
     }
     // Sin hit (raro): mantenemos Y (no cae al vacío).
 
@@ -710,7 +767,7 @@ function botSystem(dt: number) {
     const tDist = Math.sqrt(tx * tx + tz * tz)
 
     if (tDist > 0.5) {
-      const currentSpeed = bot.isJumping ? BOT_SPEED * 1.8 : BOT_SPEED
+      const currentSpeed = BOT_SPEED
       const moveStep = currentSpeed * dt
       
       const walkLookTarget = Vector3.create(steer.x, botPos.y, steer.z)

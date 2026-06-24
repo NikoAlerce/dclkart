@@ -20,7 +20,10 @@ export const PB_MSG = {
   score: 'pbScore', // cada jugador en partida difunde su score (scoreboard)
   presence: 'pbPresence', // todos los clientes difunden si están en arena (lobby)
   startMatch: 'pbStartMatch', // jugador → host: arrancar countdown con un modo
-  teamScore: 'pbTeamScore' // atacante → host: sumar punto a un equipo
+  teamScore: 'pbTeamScore', // atacante → host: sumar punto a un equipo
+  joinTeam: 'pbJoinTeam', // jugador → host: pedir asignación de equipo (T vs CT)
+  teamRoster: 'pbTeamRoster', // host → todos: roster de equipos completo (autoritativo)
+  ffaWin: 'pbFfaWin' // jugador → host: "llegué al cap de kills" (FFA) → host cierra la ronda
 }
 
 export type Vec = { x: number; y: number; z: number }
@@ -32,7 +35,10 @@ export type PlayerHitMsg = { target: string; by: string; r: number; g: number; b
 export type PlayerKilledMsg = { by: string; name: string }
 export type PlayerShotMsg = { id: string; from: Vec; to: Vec; normal: Vec; r: number; g: number; b: number }
 export type PowerupTakenMsg = { slot: number; by: string }
-export type ScoreMsg = { id: string; name: string; score: number; kills: number; team: number }
+export type ScoreMsg = { id: string; name: string; score: number; kills: number }
 export type PresenceMsg = { id: string; inArena: boolean }
 export type StartMatchMsg = { mode: number; bots: boolean } // mode: 0 ffa, 1 team; bots: con/sin bots
 export type TeamScoreMsg = { team: number } // 1 = T, 2 = CT
+export type JoinTeamMsg = { addr: string } // addr (lowercase) del que pide equipo
+export type TeamRosterMsg = { entries: { addr: string; team: number }[] } // roster completo
+export type FfaWinMsg = { name: string } // nombre del ganador (FFA, llegó al cap)

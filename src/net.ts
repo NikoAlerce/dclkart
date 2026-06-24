@@ -69,3 +69,10 @@ export function isHost(): boolean {
 export function getMyId(): string {
   return myId
 }
+
+/** Address (lowercase) del jugador local — identidad consistente entre clientes
+ * (igual base que la elección de host). Úsala como clave para estado por-jugador
+ * sincronizado (ej: roster de equipos), no el userId, que puede diferir/guests. */
+export function getMyAddr(): string {
+  return myAddr
+}

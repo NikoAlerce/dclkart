@@ -12,16 +12,16 @@ import {
 import { Vector3, Quaternion, Color3, Color4 } from '@dcl/sdk/math'
 import { movePlayerTo } from '~system/RestrictedActions'
 import { WORLD_Y_OFFSET } from './spawnConfig'
-import { PaintballState, PB_ZONE } from './paintballState'
-import { setupBots, spawnBots, getClosestBot, getBotIndex, creditKill, BotState } from './paintballBots'
+import { PaintballState, PB_ZONE, KILLS_TO_WIN } from './paintballState'
+import { setupBots, spawnBots, getClosestBot, getBotIndex, getBotTeam, creditKill, BotState } from './paintballBots'
 import { setupLasers, spawnLaser } from './paintballLasers'
 import { setupPaintballFX, spawnMuzzleFlash } from './paintballFX'
 import { setupWeaponSystem, createWeapon, removeWeapon, playWeaponRecoil } from './paintballWeapon'
 import { setupPowerups, clearPowerups } from './paintballPowerups'
-import { PLAYER_PAINT, MONSTER_PAINT } from './paintballColors'
-import { pbBus, PB_MSG, PlayerHitMsg, PlayerShotMsg, PlayerKilledMsg, ScoreMsg, PresenceMsg } from './paintballNet'
+import { PLAYER_PAINT } from './paintballColors'
+import { pbBus, PB_MSG, PlayerHitMsg, PlayerShotMsg, PlayerKilledMsg, ScoreMsg, PresenceMsg, JoinTeamMsg, TeamRosterMsg } from './paintballNet'
 import { ScoreEntry } from './paintballState'
-import { getMyId } from './net'
+import { getMyId, getMyAddr, isHost } from './net'
 import { getPlayer } from '@dcl/sdk/players'
 import { ARENA_NPC, TEAM_SPAWN_T, TEAM_SPAWN_CT, FFA_SPAWNS, TEAM_COLOR_T, TEAM_COLOR_CT, ARENA_CENTER, ArenaCalibration, applyArenaCalibration, setupSpawnCalibration, ARENA_FLOOR_Y } from './paintballArena'
 import { setupMatch, requestStartMatch } from './paintballMatch'
@@ -37,8 +37,6 @@ import {
 // ESTADO GLOBAL — leído por ui.tsx
 // State and Zone moved to paintballState.ts
 
-// Máximo de kills para ganar la ronda
-const KILLS_TO_WIN    = 15
 // Distancia máxima de disparo
 const SHOOT_RANGE     = 80
 // Radio de impacto en otro jugador (hit box simplificado)
@@ -69,7 +67,7 @@ let hitFlashAccum = 0
 let shootCooldown = 0
 
 // Scoreboard compartido: tabla de scores difundidos por cada jugador (con TTL).
-const scoreMap = new Map<string, { name: string; score: number; kills: number; team: number; t: number }>()
+const scoreMap = new Map<string, { name: string; score: number; kills: number; t: number }>()
 let scoreBroadcastAccum = 0
 
 // Color de pintura del jugador local (verde en FFA, color de equipo en T vs CT).
@@ -78,6 +76,17 @@ let myPaint = PLAYER_PAINT.emissive
 // Presencia en la arena: quién está jugando ahora mismo (TTL corto).
 const presenceMap = new Map<string, number>() // userId → ttl segundos
 let presenceBroadcastAccum = 0
+
+// ── Roster de equipos AUTORITATIVO del host (modo T vs CT) ─────────────────────
+// El host asigna cada addr al equipo con MENOS jugadores presentes (secuencialmente,
+// así dos que entran a la vez NO caen los dos en el mismo equipo) y difunde el roster
+// completo. Todos lo leen para el color, el spawn y el friendly-fire. Reemplaza la
+// inferencia frágil desde scoreMap (TTL de 6s + carreras de balanceo).
+const teamRoster = new Map<string, number>()     // addr (lowercase) → equipo (1 T, 2 CT) — en TODOS los clientes
+const hostTeamRoster = new Map<string, number>() // fuente de verdad — solo el host la escribe
+let teamRosterBroadcastAccum = 0
+let teamJoinRetryAccum = 0
+let wasHost = false // para detectar el handover de host y heredar el roster sin scramble
 
 // Entidad raycaster (hijo de la cámara del jugador)
 let rayEntity: ReturnType<typeof engine.addEntity> | null = null
@@ -171,20 +180,84 @@ function doRespawn() {
   refreshCameraArea()
 }
 
+// ── Equipos autoritativos por el host ────────────────────────────────────────
+// Addresses (lowercase) de los jugadores reales presentes en la escena (no bots).
+function hostPresentAddrs(): Set<string> {
+  const present = new Set<string>()
+  const me = PlayerIdentityData.getOrNull(engine.PlayerEntity)
+  if (me?.address) present.add(me.address.toLowerCase())
+  for (const [, idData] of engine.getEntitiesWith(PlayerIdentityData)) {
+    const a = (idData.address || '').toLowerCase()
+    if (a && !a.startsWith('bot_')) present.add(a)
+  }
+  return present
+}
+
+function broadcastTeamRoster() {
+  const entries: { addr: string; team: number }[] = []
+  for (const [addr, team] of hostTeamRoster) entries.push({ addr, team })
+  pbBus.emit(PB_MSG.teamRoster, { entries })
+}
+
+// El host asigna `addr` (si no lo tenía ya) al equipo con menos jugadores presentes.
+// Poda primero a los que ya no están → el balance refleja a los que realmente juegan.
+function hostAssignTeam(addr: string) {
+  const present = hostPresentAddrs()
+  for (const k of [...hostTeamRoster.keys()]) {
+    if (!present.has(k)) hostTeamRoster.delete(k)
+  }
+  if (!hostTeamRoster.has(addr)) {
+    let t = 0
+    let ct = 0
+    for (const team of hostTeamRoster.values()) {
+      if (team === 1) t++
+      else if (team === 2) ct++
+    }
+    hostTeamRoster.set(addr, t <= ct ? 1 : 2)
+  }
+  broadcastTeamRoster()
+}
+
+// Todos los clientes reciben el roster y fijan SU equipo (color + spawn) en cuanto
+// el host los asigna. Es idempotente: solo teleporta la primera vez que cambia.
+function applyTeamRoster(entries: { addr: string; team: number }[]) {
+  teamRoster.clear()
+  for (const e of entries) teamRoster.set(e.addr, e.team)
+  if (PaintballState.matchMode !== 1) return
+  const t = teamRoster.get(getMyAddr())
+  if (t === undefined) return
+  const changed = PaintballState.myTeam !== t
+  PaintballState.myTeam = t
+  myPaint = t === 1 ? TEAM_COLOR_T : TEAM_COLOR_CT
+  if (changed && PaintballState.inGame && !PaintballState.respawning) {
+    teleportTo(getMySpawn()) // reubicar al spawn correcto del equipo
+  }
+}
+
+/** Equipo de un jugador (1 T, 2 CT, 0 ninguno) según el roster autoritativo del host.
+ * Lo usa la IA de los bots para no disparar a su propio equipo en modo T vs CT. */
+export function getTeamOf(addr: string): number {
+  return teamRoster.get(addr.toLowerCase()) ?? 0
+}
+
 // Resuelve un impacto local sobre una entidad: si es un bot, avisa al host
 // (botDamage); si es un jugador real, le avisa a esa víctima (playerHit PvP).
 function hitTarget(entity: Entity) {
   const idx = getBotIndex(entity)
   if (idx >= 0) {
+    // Friendly fire OFF con bots: en modo equipos no le pegás a un bot de tu equipo.
+    if (PaintballState.matchMode === 1 && PaintballState.myTeam !== 0 && getBotTeam(idx) === PaintballState.myTeam) return
     pbBus.emit(PB_MSG.botDamage, { bot: idx, by: getMyId() })
   } else {
     const id = PlayerIdentityData.getOrNull(entity)
     const isBot = BotState.has(entity)
     if (id && id.address) {
-      // Friendly fire OFF: en modo equipos no le pegás a un compañero.
+      // Friendly fire OFF: en modo equipos no le pegás a un compañero. La pertenencia
+      // viene del roster autoritativo del host (clave: address normalizada), no del
+      // scoreMap con TTL (que dejaba pasar golpes a compañeros si la entry no había llegado).
       if (PaintballState.matchMode === 1 && PaintballState.myTeam !== 0) {
-        const tt = scoreMap.get(id.address)
-        if (tt && tt.team === PaintballState.myTeam) return
+        const tTeam = teamRoster.get(id.address.toLowerCase())
+        if (tTeam === PaintballState.myTeam) return
       }
       pbBus.emit(PB_MSG.playerHit, {
         target: id.address,
@@ -377,7 +450,20 @@ export function setupPaintball() {
   // Scoreboard compartido: recibir el score difundido por otro jugador.
   pbBus.on(PB_MSG.score, (m: ScoreMsg) => {
     if (!m.id) return
-    scoreMap.set(m.id, { name: m.name, score: m.score, kills: m.kills, team: m.team, t: 6.0 })
+    scoreMap.set(m.id, { name: m.name, score: m.score, kills: m.kills, t: 6.0 })
+  })
+
+  // Equipos: el host asigna (autoritativo) y difunde el roster completo.
+  pbBus.on(PB_MSG.joinTeam, (m: JoinTeamMsg) => {
+    if (!isHost()) return
+    const addr = (m.addr || '').toLowerCase()
+    if (!addr) return
+    hostAssignTeam(addr)
+  })
+
+  // Equipos: todos reciben el roster y fijan su propio equipo/color/spawn.
+  pbBus.on(PB_MSG.teamRoster, (m: TeamRosterMsg) => {
+    applyTeamRoster(m.entries || [])
   })
 
   // Presencia en arena: ping ambiental para el lobby (incluso fuera de partida).
@@ -390,6 +476,46 @@ export function setupPaintball() {
   // Sistema de presencia + tabla. Corre SIEMPRE (no solo en partida) para que el
   // lobby muestre cuántos hay peleando antes de entrar.
   engine.addSystem((dt: number) => {
+    // ── Equipos: al convertirme en host (el anterior se fue), heredo el roster desde
+    // mi copia local del último broadcast. Sin esto el host nuevo arrancaría con el
+    // roster vacío y reasignaría a todos → la gente cambiaría de equipo a mitad de ronda.
+    const hostNow = isHost()
+    if (hostNow && !wasHost) {
+      for (const [addr, team] of teamRoster) {
+        if (!hostTeamRoster.has(addr)) hostTeamRoster.set(addr, team)
+      }
+    }
+    wasHost = hostNow
+
+    // ── Equipos: el host re-difunde el roster (y poda a los ausentes) cada 2.5s,
+    // así los que llegan tarde o perdieron un mensaje quedan sincronizados.
+    if (isHost()) {
+      teamRosterBroadcastAccum += dt
+      if (teamRosterBroadcastAccum >= 2.5) {
+        teamRosterBroadcastAccum = 0
+        const present = hostPresentAddrs()
+        let pruned = false
+        for (const k of [...hostTeamRoster.keys()]) {
+          if (!present.has(k)) { hostTeamRoster.delete(k); pruned = true }
+        }
+        if (hostTeamRoster.size > 0 || pruned) broadcastTeamRoster()
+      }
+    }
+
+    // ── Equipos: re-pido equipo periódicamente mientras juego en modo team. Rápido
+    // si todavía no me asignaron (2s), lento como keep-alive si ya tengo equipo (6s).
+    // El keep-alive evita que, si el host me poda por un parpadeo del scan de avatares,
+    // quede fuera del roster sin recuperación (el host conserva mi equipo: es idempotente).
+    if (PaintballState.inGame && PaintballState.matchMode === 1) {
+      teamJoinRetryAccum += dt
+      const retryInterval = PaintballState.myTeam === 0 ? 2.0 : 6.0
+      if (teamJoinRetryAccum >= retryInterval) {
+        teamJoinRetryAccum = 0
+        const addr = getMyAddr()
+        if (addr) pbBus.emit(PB_MSG.joinTeam, { addr })
+      }
+    }
+
     // Difundir mi presencia cada 2.5s
     presenceBroadcastAccum += dt
     if (presenceBroadcastAccum >= 2.5) {
@@ -613,19 +739,32 @@ export function setupPaintball() {
       RaycastResult.deleteFrom(rayEntity)
     }
 
+    // ── Fin de ronda AUTORITATIVO: cuando el host pasa la partida a "resultados"
+    // (phase 3), todos cerramos la ronda a la vez — por tiempo agotado o por cap de
+    // kills en FFA. Esto reemplaza el game-over local por timer/cap que desincronizaba.
+    if (PaintballState.matchPhase === 3 && !PaintballState.gameOver) {
+      PaintballState.gameOver = true
+      if (PaintballState.matchMode === 1) {
+        PaintballState.gameMsg = PaintballState.matchWinner === 1 ? '⚔️  Terrorists win!'
+          : PaintballState.matchWinner === 2 ? '🛡  Counter-Terrorists win!'
+          : '🤝  Round draw'
+      } else if (PaintballState.matchWinnerName) {
+        PaintballState.gameMsg = PaintballState.kills >= KILLS_TO_WIN
+          ? '🏆  You won the round!'
+          : `🏁  ${PaintballState.matchWinnerName} won the round`
+      } else {
+        PaintballState.gameMsg = `⏱  Time's up — ${PaintballState.kills} splats`
+      }
+    }
+
     // ── Game over → no procesar nada más ──────────────────────────────────
     if (PaintballState.gameOver) return
 
-    // ── Timer de ronda ────────────────────────────────────────────────────
+    // ── Timer local (solo HUD de respaldo; el timer real es matchTimer del host) ──
     timerAccum += dt
     if (timerAccum >= 1) {
       timerAccum -= 1
       PaintballState.timeLeft = Math.max(0, PaintballState.timeLeft - 1)
-      if (PaintballState.timeLeft === 0) {
-        PaintballState.gameOver = true
-        PaintballState.gameMsg  = `⏱  Time's up — ${PaintballState.kills} kills`
-        return
-      }
     }
 
     // ── Combo: decae si pasás demasiado tiempo sin eliminar ───────────────
@@ -654,8 +793,7 @@ export function setupPaintball() {
           id: myId,
           name: getPlayer()?.name || 'Player',
           score: PaintballState.score,
-          kills: PaintballState.kills,
-          team: PaintballState.myTeam
+          kills: PaintballState.kills
         })
       }
     }
@@ -844,15 +982,6 @@ export function setupPaintball() {
       }
     }
     
-    // ── MONSTER HAZARD (Riesgo Neutral) ─────────────────────────────────
-    // Si el Flowerman (arbolesEntity) está a menos de 4m del jugador, pierde 1 vida
-    const monsterDistX = -104.2 - myTransform.position.x
-    const monsterDistZ = 73.2 - myTransform.position.z
-    const distToMonster = Math.sqrt(monsterDistX*monsterDistX + monsterDistZ*monsterDistZ)
-    
-    if (distToMonster < 4.0 && !invulActive && !PaintballState.respawning) {
-      receivePaintballHit(MONSTER_PAINT.emissive)
-    }
   })
 }
 
@@ -866,19 +995,15 @@ function enterArena(mode: number) {
   PaintballState.isSolo    = true
   PaintballState.matchMode = mode
 
-  // Asignar equipo (modo equipos): al equipo con menos jugadores.
+  // Asignación de equipo: ahora la decide el HOST (autoritativa + sincronizada),
+  // NO se infiere del scoreMap. Entramos con color neutral y myTeam=0; cuando llega
+  // el roster del host (applyTeamRoster) se fija el equipo, el color y nos teleporta
+  // al spawn correcto. El sistema de presencia re-pide equipo si tarda en llegar.
+  PaintballState.myTeam = 0
+  myPaint = PLAYER_PAINT.emissive
   if (mode === 1) {
-    let t = 0
-    let ct = 0
-    for (const [, e] of scoreMap) {
-      if (e.team === 1) t++
-      else if (e.team === 2) ct++
-    }
-    PaintballState.myTeam = t <= ct ? 1 : 2
-    myPaint = PaintballState.myTeam === 1 ? TEAM_COLOR_T : TEAM_COLOR_CT
-  } else {
-    PaintballState.myTeam = 0
-    myPaint = PLAYER_PAINT.emissive
+    const addr = getMyAddr()
+    if (addr) pbBus.emit(PB_MSG.joinTeam, { addr })
   }
 
   PaintballState.inGame    = true

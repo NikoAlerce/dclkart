@@ -53,6 +53,7 @@ export const PaintballState = {
   teamScoreT:  0,      // puntaje Terroristas
   teamScoreCT: 0,      // puntaje Counter-Terroristas
   matchWinner: 0,      // 0 none, 1 T, 2 CT
+  matchWinnerName: '', // nombre del ganador FFA (sincronizado por el host)
   myTeam:      0,      // 0 ninguno, 1 T, 2 CT
 
   // ── Power-ups activos (segundos restantes) ──
@@ -65,6 +66,8 @@ export const PaintballState = {
 export const POWERUP_DURATION = { rapid: 9, triple: 9, shield: 6 }
 // Ventana del combo (segundos sin kill antes de resetear)
 export const COMBO_WINDOW = 4.0
+// Kills para ganar una ronda FFA (única fuente de verdad: motor, bots y UI la leen de acá)
+export const KILLS_TO_WIN = 15
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ZONA PAINTBALL — coordenadas del campo (área del bosque ampliada)

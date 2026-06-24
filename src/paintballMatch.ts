@@ -6,7 +6,7 @@ import { engine, Entity, Schemas } from '@dcl/sdk/ecs'
 import { syncEntity } from '@dcl/sdk/network'
 import { PaintballState } from './paintballState'
 import { isHost, SYNC_IDS } from './net'
-import { pbBus, PB_MSG, StartMatchMsg, TeamScoreMsg } from './paintballNet'
+import { pbBus, PB_MSG, StartMatchMsg, TeamScoreMsg, FfaWinMsg } from './paintballNet'
 
 export const PBMatch = engine.defineComponent('pbMatch', {
   phase: Schemas.Int, // 0 idle, 1 countdown, 2 active, 3 results
@@ -15,7 +15,8 @@ export const PBMatch = engine.defineComponent('pbMatch', {
   scoreT: Schemas.Int,
   scoreCT: Schemas.Int,
   winner: Schemas.Int, // 0 none, 1 T, 2 CT
-  bots: Schemas.Int // 0 sin bots, 1 con bots
+  bots: Schemas.Int, // 0 sin bots, 1 con bots
+  winnerName: Schemas.String // nombre del ganador FFA (vacío = sin ganador / por tiempo)
 })
 
 // Countdown SIEMPRE de 30s: ventana para que se sumen otros jugadores.
@@ -27,7 +28,7 @@ let matchEntity: Entity
 
 export function setupMatch() {
   matchEntity = engine.addEntity()
-  PBMatch.create(matchEntity, { phase: 0, mode: 0, timer: 0, scoreT: 0, scoreCT: 0, winner: 0, bots: 1 })
+  PBMatch.create(matchEntity, { phase: 0, mode: 0, timer: 0, scoreT: 0, scoreCT: 0, winner: 0, bots: 1, winnerName: '' })
   syncEntity(matchEntity, [PBMatch.componentId], SYNC_IDS.match)
 
   // Pedido de arrancar (host decide). El que inicia fija modo + bots.
@@ -42,7 +43,21 @@ export function setupMatch() {
       st.scoreT = 0
       st.scoreCT = 0
       st.winner = 0
+      st.winnerName = ''
     }
+  })
+
+  // FFA: un jugador llegó al cap de kills → el host cierra la ronda para TODOS
+  // (antes el cap solo marcaba game over LOCAL → desincronización: el ganador veía
+  // "ganaste" mientras la partida seguía para el resto).
+  pbBus.on(PB_MSG.ffaWin, (m: FfaWinMsg) => {
+    if (!isHost()) return
+    const st = PBMatch.getMutable(matchEntity)
+    if (st.phase !== 2 || st.mode !== 0) return
+    st.winner = 0
+    st.winnerName = m.name || ''
+    st.phase = 3
+    st.timer = 10
   })
 
   // Punto para un equipo (solo en fase activa de modo equipos)
@@ -68,6 +83,7 @@ function matchSystem(dt: number) {
   PaintballState.teamScoreT = st.scoreT
   PaintballState.teamScoreCT = st.scoreCT
   PaintballState.matchWinner = st.winner
+  PaintballState.matchWinnerName = st.winnerName
   PaintballState.matchBots = st.bots === 1
 
   if (!isHost()) return

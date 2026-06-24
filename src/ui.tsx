@@ -3,7 +3,7 @@ import { Color4 } from '@dcl/sdk/math'
 import { engine, Transform } from '@dcl/sdk/ecs'
 import { getPlayer } from '@dcl/sdk/players'
 import { RaceState } from './raceState'
-import { PaintballState } from './paintballState'
+import { PaintballState, KILLS_TO_WIN } from './paintballState'
 import { getBotsForRadar } from './paintballBots'
 import { startPaintball, joinPaintball, exitPaintball } from './paintball'
 import {
@@ -146,7 +146,7 @@ const uiComponent = () => {
             </UiEntity>
             <UiEntity uiTransform={{ width: 120, height: 40, flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
               <Label value="SPLATS" fontSize={9} color={Color4.create(0.6, 0.6, 0.7, 1)} uiTransform={{ height: 12 }} />
-              <Label value={`${ps.kills} / 15`} fontSize={18} color={Color4.White()} uiTransform={{ height: 22 }} />
+              <Label value={`${ps.kills} / ${KILLS_TO_WIN}`} fontSize={18} color={Color4.White()} uiTransform={{ height: 22 }} />
             </UiEntity>
             <UiEntity uiTransform={{ width: 120, height: 40, flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
               <Label value="TIME" fontSize={9} color={Color4.create(0.6, 0.6, 0.7, 1)} uiTransform={{ height: 12 }} />
@@ -244,11 +244,11 @@ const uiComponent = () => {
             </UiEntity>
           )}
 
-          {/* Resultado (fase 3) */}
-          {ps.matchPhase === 3 && (
+          {/* Resultado (fase 3) — banner para espectadores; el jugador en partida ve el modal gameOver */}
+          {ps.matchPhase === 3 && !ps.gameOver && (
             <UiEntity uiTransform={{ positionType: 'absolute', position: { top: '40%', left: '50%' }, margin: { left: -170 }, width: 340, height: 84, flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}
               uiBackground={{ color: Color4.create(0.04, 0.04, 0.07, 0.93) }}>
-              <Label value={ps.matchMode === 1 ? (ps.matchWinner === 1 ? '⚔️ TERRORISTS WIN' : ps.matchWinner === 2 ? '🛡 COUNTER-TERRORISTS WIN' : 'DRAW') : 'ROUND OVER'} fontSize={18} color={Color4.create(1, 0.85, 0.2, 1)} uiTransform={{ height: 30 }} />
+              <Label value={ps.matchMode === 1 ? (ps.matchWinner === 1 ? '⚔️ TERRORISTS WIN' : ps.matchWinner === 2 ? '🛡 COUNTER-TERRORISTS WIN' : 'DRAW') : (ps.matchWinnerName ? `🏆 ${ps.matchWinnerName} WINS` : 'ROUND OVER')} fontSize={18} color={Color4.create(1, 0.85, 0.2, 1)} uiTransform={{ height: 30 }} />
               <Label value={ps.matchMode === 1 ? `T ${ps.teamScoreT}  —  ${ps.teamScoreCT} CT` : `Your score: ${ps.score}`} fontSize={14} color={Color4.White()} uiTransform={{ height: 24 }} />
             </UiEntity>
           )}

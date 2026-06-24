@@ -6,6 +6,7 @@
 
 import { engine, Transform, AudioSource, Entity } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
+import { PaintballState } from './paintballState'
 
 const SND_SHOOT = 'assets/sounds/shoot.mp3'
 const SND_IMPACT = 'assets/sounds/impact.mp3'
@@ -54,6 +55,8 @@ let stepAccum = 0
 const STEP_DISTANCE = 2.2
 
 function footstepSystem(_dt: number) {
+  // Solo dentro del paintball (antes sonaban pasos por todo el World).
+  if (!PaintballState.inGame) { lastPos = null; return }
   const t = Transform.getOrNull(engine.PlayerEntity)
   if (!t) return
   const p = t.position

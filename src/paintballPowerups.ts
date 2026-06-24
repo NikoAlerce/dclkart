@@ -9,7 +9,7 @@ import { syncEntity } from '@dcl/sdk/network'
 import { isHost, getMyId, SYNC_IDS } from './net'
 import { pbBus, PB_MSG, PowerupTakenMsg } from './paintballNet'
 import { PaintballState } from './paintballState'
-import { WORLD_Y_OFFSET } from './spawnConfig'
+import { FFA_SPAWNS } from './paintballArena'
 
 export const PowerupSlot = engine.defineComponent('pbPowerupSlot', {
   kind: Schemas.Int,     // 0 rapidFire, 1 tripleShot, 2 shield
@@ -41,16 +41,23 @@ type SlotData = {
 
 const slots: SlotData[] = []
 
-const SPAWN_ANCHORS = [
-  Vector3.create(-145.0, 13.5 + WORLD_Y_OFFSET, 25.0),
-  Vector3.create(-55.0, 13.5 + WORLD_Y_OFFSET, 85.0),
-  Vector3.create(-100.0, 15.5 + WORLD_Y_OFFSET, 55.0),
-  Vector3.create(-120.0, 13.5 + WORLD_Y_OFFSET, -10.0),
-  Vector3.create(-80.0, 15.5 + WORLD_Y_OFFSET, 140.0),
-  Vector3.create(-30.0, 13.5 + WORLD_Y_OFFSET, 30.0)
-]
-
 let spawnTimer = 6.0
+
+// Posición de aparición DENTRO del arena: tomamos un spawn FFA (ya calibrado en
+// runtime) + jitter en XZ, y la altura del piso calibrado. Antes había anchors fijos
+// con coords del mapa viejo del bosque → los power-ups caían fuera del arena y bajo
+// el piso (inalcanzables). Atado al valor calibrado, es robusto a la altura real.
+function powerupAnchor(): Vector3 {
+  const base = FFA_SPAWNS[Math.floor(Math.random() * FFA_SPAWNS.length)]
+  // base.y ya viene calibrado POR spawn (su propio nivel en multinivel) → usarlo
+  // directo es más correcto que un piso global mínimo. Jitter XZ moderado para que
+  // no caiga siempre exacto sobre el spawn (ni se salga de la plataforma).
+  return Vector3.create(
+    base.x + (Math.random() - 0.5) * 6,
+    base.y + 0.6,
+    base.z + (Math.random() - 0.5) * 6
+  )
+}
 
 export function setupPowerups() {
   for (let s = 0; s < MAX_SLOTS; s++) {
@@ -100,9 +107,8 @@ function activateSlot(sd: SlotData) {
   const ps = PowerupSlot.getMutable(sd.root)
   ps.kind = Math.floor(Math.random() * KINDS.length)
   ps.active = true
-  const anchor = SPAWN_ANCHORS[Math.floor(Math.random() * SPAWN_ANCHORS.length)]
   const t = Transform.getMutable(sd.root)
-  t.position = Vector3.clone(anchor)
+  t.position = powerupAnchor()
   t.scale = Vector3.One()
   sd.takenLocally = false
 }

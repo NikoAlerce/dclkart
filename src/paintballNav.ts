@@ -97,7 +97,11 @@ function recordCell(ix: number, iz: number, e: Entity) {
       }
     }
     const y = h.position.y
-    if (y < 70.0) continue // Ignorar pistas de carrera por debajo de la arena paintball
+    // Descartar por completo la pista de karts (≈72.4) que vive debajo de la arena.
+    // El suelo más bajo válido es el túnel (≈73.6), así que todo lo que esté por
+    // debajo de 73.5 NO genera nodo de navegación (antes se clampaba, lo que creaba
+    // nodos falsos sobre el túnel y los bots se metían bajo el escenario).
+    if (y < 73.5) continue
     if (!ys.some((v) => Math.abs(v - y) < 1.0)) ys.push(y)
   }
   if (ys.length === 0) return
