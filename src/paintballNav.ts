@@ -97,7 +97,7 @@ function recordCell(ix: number, iz: number, e: Entity) {
       }
     }
     const y = h.position.y
-    if (y < 76.0) continue // Ignorar pistas de carrera por debajo de la arena paintball
+    if (y < 70.0) continue // Ignorar pistas de carrera por debajo de la arena paintball
     if (!ys.some((v) => Math.abs(v - y) < 1.0)) ys.push(y)
   }
   if (ys.length === 0) return

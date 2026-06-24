@@ -116,7 +116,7 @@ export function setupSpawnCalibration() {
             }
           }
           
-          if (h.position.y < 76.0) continue // Ignorar pistas o colisiones debajo de la arena (ej: pista de carrera a Y=73)
+          if (h.position.y < 70.0) continue // Ignorar pistas o colisiones debajo de la arena (ej: pista de carrera a Y=73)
           
           const dist = Math.abs(h.position.y - (target.y - 1.0)) // target.y tiene +1 de offset inicial
           if (dist < bestDist) {
