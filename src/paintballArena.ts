@@ -57,7 +57,7 @@ export const ARENA_BOUNDS = { minX: -250, maxX: 100, minZ: 200, maxZ: 600 }
 
 // ── Rango vertical a muestrear (multinivel: pisos/escaleras/puentes).
 // Los spawns van de Y=56.72 a Y=84.91 (raw, antes del offset). Con offset → 106..134.
-export const ARENA_Y_SAMPLE = { top: FALLBACK_FLOOR_Y + 75, bottom: FALLBACK_FLOOR_Y - 20 }
+export const ARENA_Y_SAMPLE = { top: FALLBACK_FLOOR_Y + 75, bottom: FALLBACK_FLOOR_Y - 38 }
 
 // ─── Calibración por spawn ──────────────────────────────────────────────────────
 // Lanza un raycast vertical sobre cada spawn point, desde Y alta hacia abajo.
@@ -116,7 +116,7 @@ export function setupSpawnCalibration() {
             }
           }
           
-          if (h.position.y < 95.0) continue // Ignorar pistas o colisiones debajo de la arena (ej: pista de carrera a Y=73)
+          if (h.position.y < 76.0) continue // Ignorar pistas o colisiones debajo de la arena (ej: pista de carrera a Y=73)
           
           const dist = Math.abs(h.position.y - (target.y - 1.0)) // target.y tiene +1 de offset inicial
           if (dist < bestDist) {

@@ -489,7 +489,7 @@ export function setupPaintball() {
             continue
           }
         }
-        if (h.position.y < 95.0) continue // Ignorar pistas o colisiones debajo de la arena
+        if (h.position.y < 76.0) continue // Ignorar pistas o colisiones debajo de la arena
         
         const dist = Math.abs(h.position.y - ARENA_FLOOR_Y)
         if (dist < bestDist) {
