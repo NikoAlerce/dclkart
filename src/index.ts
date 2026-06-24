@@ -384,6 +384,17 @@ export function main() {
     return e
   }
 
+  // Punto de aparición con DISPERSIÓN: en vez de mandar a todos al mismo punto exacto
+  // (donde se encimaban jugadores/autos y glitcheaba), esparce ±SPAWN_SCATTER en XZ.
+  // La Y sale del piso calibrado (groundY) para no caer al vacío.
+  const SPAWN_SCATTER = 3.5
+  function scatteredSpawn(groundY: number | null): Vector3 {
+    const jx = SPAWN_POSITION.x + (Math.random() - 0.5) * 2 * SPAWN_SCATTER
+    const jz = SPAWN_POSITION.z + (Math.random() - 0.5) * 2 * SPAWN_SCATTER
+    const y  = groundY !== null ? groundY + 1.5 : SPAWN_POSITION.y
+    return Vector3.create(jx, y, jz)
+  }
+
   const spawnProbeEnt = makeGroundProbe(SPAWN_POSITION.x, SPAWN_POSITION.z)
 
   function topHit(e: ReturnType<typeof engine.addEntity>): number | null {
@@ -414,7 +425,7 @@ export function main() {
       const dz = p.z - SPAWN_POSITION.z
       if (Math.sqrt(dx*dx + dz*dz) < 15) {
         movePlayerTo({
-          newRelativePosition: Vector3.create(SPAWN_POSITION.x, actualGroundY + 1.5, SPAWN_POSITION.z),
+          newRelativePosition: scatteredSpawn(actualGroundY),
           cameraTarget: SPAWN_CAMERA_TARGET
         }).catch(() => {})
       }
@@ -443,9 +454,8 @@ export function main() {
     if (timeSinceLastSpawnAttempt >= 1.0 || spawnAttempts === 0) {
       timeSinceLastSpawnAttempt = 0
       spawnAttempts++
-      const spawnY = actualGroundY !== null ? actualGroundY + 1.5 : SPAWN_POSITION.y
       movePlayerTo({
-        newRelativePosition: Vector3.create(SPAWN_POSITION.x, spawnY, SPAWN_POSITION.z),
+        newRelativePosition: scatteredSpawn(actualGroundY),
         cameraTarget: SPAWN_CAMERA_TARGET
       }).catch(() => {})
     }
@@ -470,9 +480,8 @@ export function main() {
       const now = Date.now()
       if (now - lastTeleportTime > 3000) {
         lastTeleportTime = now
-        const spawnY = actualGroundY !== null ? actualGroundY + 1.5 : SPAWN_POSITION.y
         movePlayerTo({
-          newRelativePosition: Vector3.create(SPAWN_POSITION.x, spawnY, SPAWN_POSITION.z),
+          newRelativePosition: scatteredSpawn(actualGroundY),
           cameraTarget: SPAWN_CAMERA_TARGET
         }).catch(() => {})
       }

@@ -12,6 +12,8 @@ import { KartData, KartOwner, TurboParticle } from './components'
 import { Quaternion, Vector3, Color3, Color4 } from '@dcl/sdk/math'
 import { movePlayerTo } from '~system/RestrictedActions'
 import { kartColliderMap } from './kart'
+import { getMyOwnerId } from './net'
+import { PHYS_SCALE_CAP } from './kartConfig'
 import { InputState } from './inputState'
 import { RaceState } from './raceState'
 
@@ -212,6 +214,7 @@ export function kartMovementSystem(dt: number) {
     const mutableKart = KartData.getMutable(entity)
     const transform   = Transform.getMutable(entity)
     const scaleMult   = mutableKart.scale || 1.0
+    const physScale   = Math.min(scaleMult, PHYS_SCALE_CAP)  // factor para rampas de velocidad (topeado)
 
     // ── 0.5 POSICIONAR SENSOR DE PISO DINÁMICAMENTE (Compensar lag de Raycast) ──
     if (mutableKart.floorSensorEntity) {
@@ -231,7 +234,13 @@ export function kartMovementSystem(dt: number) {
     const exitKart = !isShip && inputSystem.isTriggered(InputAction.IA_PRIMARY, PointerEventType.PET_DOWN)
     const exitShip = isShip && inputSystem.isTriggered(InputAction.IA_JUMP, PointerEventType.PET_DOWN)
 
-    if (exitKart || exitShip) {
+    // PROPIEDAD PERDIDA: si dos jugadores reclamaron el mismo kart a la vez, syncEntity
+    // converge KartOwner.ownerId a UNO solo. El que quedó manejando localmente pero cuyo
+    // ownerId sincronizado ya NO es el suyo, se baja solo → evita dos conductores y el glitch.
+    const owner = KartOwner.getOrNull(entity)
+    const lostOwnership = owner != null && owner.ownerId !== '' && owner.ownerId !== getMyOwnerId()
+
+    if (exitKart || exitShip || lostOwnership) {
       mutableKart.isOccupied    = false
       mutableKart.currentSpeed  = 0
       mutableKart.isDrifting    = false
@@ -251,9 +260,13 @@ export function kartMovementSystem(dt: number) {
       InputModifier.deleteFrom(engine.PlayerEntity)
       AvatarModifierArea.deleteFrom(entity)
 
-      // Liberar el kart en la red (todos los jugadores ven que quedó libre)
-      const ownerComp = KartOwner.getMutableOrNull(entity)
-      if (ownerComp) ownerComp.ownerId = ''
+      // Liberar el kart en la red (todos lo ven libre) — SOLO en salida voluntaria.
+      // Si salgo por propiedad perdida, el kart es del OTRO jugador: NO tocar su ownerId
+      // (resetearlo a '' se lo robaría y dejaría el auto "libre" mientras él lo maneja).
+      if (!lostOwnership) {
+        const ownerComp = KartOwner.getMutableOrNull(entity)
+        if (ownerComp) ownerComp.ownerId = ''
+      }
 
       // Restaurar la caja de FÍSICA del kart (otros karts rebotan). El clic para subirse
       // vive en una entidad CL_POINTER aparte (kartClicker) que nunca se borra, así que
@@ -350,6 +363,7 @@ export function kartMovementSystem(dt: number) {
     // pueden moverse libremente en los 3 ejes con R (subir) y F (bajar).
     if (mutableKart.vehicleType === 'ship') {
       const scaleMult = mutableKart.scale || 1.0
+      const physScale = Math.min(scaleMult, PHYS_SCALE_CAP)  // factor para rampas/empuje (topeado)
       const sf = Math.abs(mutableKart.currentSpeed) / mutableKart.maxSpeed
 
       // Leer el sensor de piso para saber la altura real del terreno
@@ -388,17 +402,17 @@ export function kartMovementSystem(dt: number) {
         mutableKart.currentSpeed *= (1 - mutableKart.friction * dt)
       }
 
-      // Boost post-drift también aplica en naves
+      // Boost post-drift también aplica en naves (rampa escalada por tamaño)
       if (mutableKart.boostTime > 0) {
         mutableKart.boostTime -= dt
         const boostCap = mutableKart.maxSpeed * 1.55
-        mutableKart.currentSpeed = Math.min(mutableKart.currentSpeed + 55 * dt, boostCap)
+        mutableKart.currentSpeed = Math.min(mutableKart.currentSpeed + 55 * physScale * dt, boostCap)
       }
 
       // Si el turbo está activo y no hay boost de drift, aceleramos hacia el turboCap
       if (isTurboActive && mutableKart.boostTime <= 0) {
         const turboCap = mutableKart.maxSpeed * 2.1
-        mutableKart.currentSpeed = Math.min(mutableKart.currentSpeed + 90 * dt, turboCap)
+        mutableKart.currentSpeed = Math.min(mutableKart.currentSpeed + 90 * physScale * dt, turboCap)
       }
 
       const currentMaxCap = mutableKart.boostTime > 0
@@ -429,10 +443,11 @@ export function kartMovementSystem(dt: number) {
       transform.position.x += fwdShip.x * mutableKart.currentSpeed * dt
       transform.position.z += fwdShip.z * mutableKart.currentSpeed * dt
 
-      // ── Empuje Vertical R/F ───────────────────────────────────────────
-      const SHIP_VERT_ACCEL  = 45.0  // aceleración vertical m/s²
-      const SHIP_VERT_MAX    = 28.0  // velocidad vertical máxima
-      const SHIP_VERT_DRAG   = 1.5   // amortiguación al soltar (frena más rápido al soltar)
+      // ── Empuje Vertical (subir/bajar) ─────────────────────────────────
+      // Escalado por tamaño: una nave N× más grande sube/baja N× más rápido (mismo feel).
+      const SHIP_VERT_ACCEL  = 45.0 * physScale  // aceleración vertical m/s²
+      const SHIP_VERT_MAX    = 28.0 * physScale  // velocidad vertical máxima
+      const SHIP_VERT_DRAG   = 1.5   // amortiguación al soltar (adimensional, no escala)
 
       if (InputState.thrustUp) {
         mutableKart.shipVertSpeed = Math.min(SHIP_VERT_MAX, mutableKart.shipVertSpeed + SHIP_VERT_ACCEL * dt)
@@ -776,14 +791,14 @@ export function kartMovementSystem(dt: number) {
     if (mutableKart.boostTime > 0) {
       mutableKart.boostTime -= dt
       const boostCap = mutableKart.maxSpeed * 1.65
-      mutableKart.currentSpeed = Math.min(mutableKart.currentSpeed + 60 * dt, boostCap)
+      mutableKart.currentSpeed = Math.min(mutableKart.currentSpeed + 60 * physScale * dt, boostCap)
       isAccelerating = true
     }
 
     // Si el turbo está activo y no hay boost de drift, aceleramos hacia el turboCap
     if (isTurboActive && mutableKart.boostTime <= 0) {
       const turboCap = mutableKart.maxSpeed * 2.1
-      mutableKart.currentSpeed = Math.min(mutableKart.currentSpeed + 90 * dt, turboCap)
+      mutableKart.currentSpeed = Math.min(mutableKart.currentSpeed + 90 * physScale * dt, turboCap)
       isAccelerating = true
     }
 

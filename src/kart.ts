@@ -13,7 +13,8 @@ import { myProfile } from '@dcl/sdk/network'
 import { KartData, KartOwner } from './components'
 import { RaceState } from './raceState'
 import type { KartConfig } from './kartConfig'
-import { DEFAULT_PHYSICS, KART_CONFIGS } from './kartConfig'
+import { DEFAULT_PHYSICS, KART_CONFIGS, PHYS_SCALE_CAP } from './kartConfig'
+import { getMyOwnerId } from './net'
 
 // ─── Estacionamiento del avatar ───────────────────────────────────────────────
 // El avatar se teletransporta aquí al subirse. Alto (Y=100) para que
@@ -38,6 +39,10 @@ export function createKart(config: KartConfig): number {
   })
 
   const scaleMult = config.scale ?? 1.0
+  // Factor para la FÍSICA (velocidad/aceleración): proporcional al tamaño pero topeado
+  // (ver PHYS_SCALE_CAP) para que las naves enormes no queden incontrolables. La
+  // geometría sigue usando scaleMult (tamaño real).
+  const physScale = Math.min(scaleMult, PHYS_SCALE_CAP)
 
   // ── Modelo visual (hijo con corrección de orientación) ──────────────────
   const kartModel = engine.addEntity()
@@ -82,10 +87,17 @@ export function createKart(config: KartConfig): number {
 
   // ── Datos de físicas iniciales ──────────────────────────────────────────
   // Usa los parámetros del config si están definidos, si no los defaults estándar.
+  //
+  // FÍSICA ESCALADA POR TAMAÑO: velocidad y aceleración (magnitudes LINEALES, m/s y
+  // m/s²) se multiplican por physScale (= tamaño, topeado en PHYS_SCALE_CAP) para que
+  // un vehículo N× más grande se mueva N× más rápido → mantiene el MISMO feel que a
+  // escala 1 (mismos "largos de carrocería" por segundo; el radio de giro crece
+  // proporcional porque turnSpeed —angular, °/s— queda constante). friction es
+  // adimensional (no escala).
   KartData.create(kartEntity, {
     currentSpeed:   0,
-    maxSpeed:       config.maxSpeed     ?? DEFAULT_PHYSICS.maxSpeed,
-    acceleration:   config.acceleration ?? DEFAULT_PHYSICS.acceleration,
+    maxSpeed:       (config.maxSpeed     ?? DEFAULT_PHYSICS.maxSpeed)     * physScale,
+    acceleration:   (config.acceleration ?? DEFAULT_PHYSICS.acceleration) * physScale,
     friction:       config.friction     ?? DEFAULT_PHYSICS.friction,
     turnSpeed:      config.turnSpeed    ?? DEFAULT_PHYSICS.turnSpeed,
     isOccupied:     false,
@@ -134,8 +146,11 @@ export function createKart(config: KartConfig): number {
       if (ownership.ownerId !== '') return
       if (kartData.isOccupied) return
 
-      // Reclamar el kart: sincronizado para que todos vean que está ocupado
-      const myId = myProfile?.userId ?? 'local'
+      // Reclamar el kart: sincronizado para que todos vean que está ocupado.
+      // Usamos address (getMyOwnerId) → consistente entre clientes. Si dos reclaman
+      // a la vez, syncEntity converge a UN ownerId; el que no coincida se baja solo
+      // (ver chequeo de "propiedad perdida" en kartMovementSystem).
+      const myId = getMyOwnerId()
       ownership.ownerId   = myId
       kartData.isOccupied = true
       RaceState.isOccupied = true

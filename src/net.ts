@@ -76,3 +76,10 @@ export function getMyId(): string {
 export function getMyAddr(): string {
   return myAddr
 }
+
+/** Id de propietario para vehículos sincronizados (KartOwner). Usa el address
+ * (consistente entre clientes) con fallback a userId/local si aún no cargó. Nunca
+ * devuelve '' (que significaría "libre") cuando hay identidad disponible. */
+export function getMyOwnerId(): string {
+  return myAddr || myProfile?.userId || 'local'
+}
