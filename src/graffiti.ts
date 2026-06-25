@@ -43,6 +43,11 @@ const GraffitiData = engine.defineComponent('graffitiData', {
 type Slot = { root: Entity; visual: Entity; lastSeq: number; lastActive: boolean }
 const slots: Slot[] = []
 
+// Hook: avisar cuando el jugador LOCAL pinta un punto (lo usa el side-game "Tag the City").
+type PaintListener = (x: number, y: number, z: number) => void
+const paintListeners: PaintListener[] = []
+export function onGraffitiPaint(cb: PaintListener) { paintListeners.push(cb) }
+
 type PaintMsg = { x: number; y: number; z: number; nx: number; ny: number; nz: number; r: number; g: number; b: number; brush: number; size: number; author: string; grow?: boolean }
 type EraseMsg = { x: number; y: number; z: number; r: number }
 
@@ -273,6 +278,7 @@ function graffitiSystem(dt: number) {
             nx: hit.normalHit.x, ny: hit.normalHit.y, nz: hit.normalHit.z,
             r: c.r, g: c.g, b: c.b, brush: GraffitiState.selectedBrush, size: base, author
           })
+          for (const l of paintListeners) l(hit.position.x, hit.position.y, hit.position.z)
         }
       } else if (!GraffitiState.eraser) {
         // SATURACIÓN: quieto en el mismo lugar → la mancha CRECE (como un aerosol real).

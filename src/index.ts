@@ -14,6 +14,7 @@ import { setupStreaming, isStreamActive, LIVEKIT_SRC } from './streaming'
 import { Playlist } from './playlist'
 import { setupPaintball } from './paintball'
 import { setupGraffiti } from './graffiti'
+import { setupGraffitiMission } from './graffitiMission'
 import { setupNet } from './net'
 
 
@@ -610,6 +611,8 @@ export function main() {
 
   // 8.5 Graffiti / Aerosol: pintar en cualquier superficie, sincronizado (v1 en-sesión, FIFO).
   setupGraffiti()
+  // 8.6 Side-game "Tag the City": NPC cerca del spawn → misión de taguear spots en el dust.
+  setupGraffitiMission()
 
   // 7. Montado en el lomo: el avatar deja de colisionar con los árboles Y con el track
   // (que incluye los EDIFICIOS de la arena). El monstruo los atraviesa; así el rider también

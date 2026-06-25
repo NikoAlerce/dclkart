@@ -28,6 +28,17 @@ export const GRAFFITI_BRUSHES: { name: string; tex: string; glow: number }[] = [
 export const GRAFFITI_SIZES: number[] = [0.5, 1.0, 2.0, 3.5]
 export const GRAFFITI_SIZE_LABELS: string[] = ['S', 'M', 'L', 'XL']
 
+// ─── Side-game "Tag the City" (se entra hablando con el NPC) ──────────────────
+export const GraffitiMission = {
+  inviteOpen: false,  // modal del NPC abierto
+  active: false,      // misión en curso
+  tagged: 0,          // spots tagueados
+  total: 0,           // spots totales
+  timeLeft: 0,        // segundos restantes
+  completed: false,   // ¿completada?
+  resultMsg: ''       // mensaje de resultado
+}
+
 // Paleta de colores del spray.
 export const GRAFFITI_PALETTE: Color3[] = [
   Color3.create(0.95, 0.15, 0.15), // 0 rojo

@@ -4,7 +4,8 @@ import { engine, Transform, PlayerIdentityData } from '@dcl/sdk/ecs'
 import { getPlayer } from '@dcl/sdk/players'
 import { RaceState } from './raceState'
 import { PaintballState, KILLS_TO_WIN } from './paintballState'
-import { GraffitiState, GRAFFITI_PALETTE, GRAFFITI_BRUSHES, GRAFFITI_SIZE_LABELS } from './graffitiState'
+import { GraffitiState, GRAFFITI_PALETTE, GRAFFITI_BRUSHES, GRAFFITI_SIZE_LABELS, GraffitiMission } from './graffitiState'
+import { startMission, exitMission } from './graffitiMission'
 import { getBotsForRadar } from './paintballBots'
 import { startPaintball, joinPaintball, exitPaintball } from './paintball'
 import { getMyAddr } from './net'
@@ -391,6 +392,56 @@ const uiComponent = () => {
             uiBackground={{ color: GraffitiState.sprayMode ? Color4.create(0.2, 0.7, 0.4, 0.95) : Color4.create(0.1, 0.1, 0.15, 0.85) }}
             onMouseDown={() => { GraffitiState.sprayMode = !GraffitiState.sprayMode; GraffitiState.lastUiClickTime = Date.now() }}>
             <Label value={GraffitiState.sprayMode ? '🎨 AEROSOL — clic para pintar' : '🎨 Aerosol'} fontSize={11} color={Color4.White()} />
+          </UiEntity>
+        </UiEntity>
+      )}
+
+      {/* ══════════ TAG THE CITY (side-game) ══════════ */}
+      {/* HUD de progreso (misión activa) */}
+      {GraffitiMission.active && !GraffitiMission.completed && (
+        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 16, left: '50%' }, margin: { left: -150 }, width: 300, height: 40, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}
+          uiBackground={{ color: Color4.create(0.06, 0.02, 0.09, 0.88) }}>
+          <Label value={`🎨 ${GraffitiMission.tagged}/${GraffitiMission.total} tagueados   ·   ⏱ ${Math.ceil(GraffitiMission.timeLeft)}s`} fontSize={15} color={Color4.create(1, 0.5, 0.95, 1)} />
+        </UiEntity>
+      )}
+
+      {/* Modal de invitación del NPC */}
+      {GraffitiMission.inviteOpen && !GraffitiMission.active && (
+        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}
+          uiBackground={{ color: Color4.create(0, 0, 0, 0.55) }}>
+          <UiEntity uiTransform={{ width: 460, height: 230, flexDirection: 'column', padding: 18 }} uiBackground={{ color: Color4.create(0.08, 0.04, 0.11, 0.98) }}>
+            <Label value="🎨  TAG THE CITY" fontSize={22} color={Color4.create(1, 0.45, 0.95, 1)} uiTransform={{ width: '100%', height: 32 }} />
+            <Label value="Te equipo el aerosol y te llevo al DUST." fontSize={12} color={Color4.create(0.85, 0.85, 0.95, 1)} uiTransform={{ width: '100%', height: 22, margin: { top: 6 } }} />
+            <Label value="Tagueá todos los spots marcados 🎯 contrarreloj." fontSize={12} color={Color4.create(0.85, 0.85, 0.95, 1)} uiTransform={{ width: '100%', height: 22 }} />
+            <Label value="(Mantené apretado para pintar líneas)" fontSize={10} color={Color4.create(0.6, 0.65, 0.75, 1)} uiTransform={{ width: '100%', height: 18, margin: { bottom: 10 } }} />
+            <UiEntity uiTransform={{ width: '100%', height: 46, flexDirection: 'row', justifyContent: 'space-between', margin: { top: 8 } }}>
+              <UiEntity uiTransform={{ width: 200, height: 46, justifyContent: 'center', alignItems: 'center' }} uiBackground={{ color: Color4.create(0.7, 0.25, 0.6, 1) }}
+                onMouseDown={() => { startMission() }}>
+                <Label value="🎨 EMPEZAR" fontSize={14} color={Color4.White()} />
+              </UiEntity>
+              <UiEntity uiTransform={{ width: 200, height: 46, justifyContent: 'center', alignItems: 'center' }} uiBackground={{ color: Color4.create(0.25, 0.25, 0.3, 1) }}
+                onMouseDown={() => { GraffitiMission.inviteOpen = false }}>
+                <Label value="✖ AHORA NO" fontSize={14} color={Color4.White()} />
+              </UiEntity>
+            </UiEntity>
+          </UiEntity>
+        </UiEntity>
+      )}
+
+      {/* Resultado de la misión */}
+      {GraffitiMission.active && GraffitiMission.completed && (
+        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: '32%', left: '50%' }, margin: { left: -200 }, width: 400, height: 170, flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: 14 }}
+          uiBackground={{ color: Color4.create(0.08, 0.04, 0.11, 0.96) }}>
+          <Label value={GraffitiMission.resultMsg} fontSize={18} color={Color4.create(1, 0.5, 0.95, 1)} uiTransform={{ width: '100%', height: 50 }} />
+          <UiEntity uiTransform={{ width: '100%', height: 46, flexDirection: 'row', justifyContent: 'space-between', margin: { top: 14 } }}>
+            <UiEntity uiTransform={{ width: 180, height: 46, justifyContent: 'center', alignItems: 'center' }} uiBackground={{ color: Color4.create(0.7, 0.25, 0.6, 1) }}
+              onMouseDown={() => { startMission() }}>
+              <Label value="🔁 DE NUEVO" fontSize={13} color={Color4.White()} />
+            </UiEntity>
+            <UiEntity uiTransform={{ width: 180, height: 46, justifyContent: 'center', alignItems: 'center' }} uiBackground={{ color: Color4.create(0.4, 0.2, 0.25, 1) }}
+              onMouseDown={() => { exitMission() }}>
+              <Label value="🚪 SALIR" fontSize={13} color={Color4.White()} />
+            </UiEntity>
           </UiEntity>
         </UiEntity>
       )}
