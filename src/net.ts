@@ -26,7 +26,8 @@ export const SYNC_IDS = {
   powerupBase: 2300, // power-ups: 2300..2399
   paintballState: 2500,
   match: 2600, // estado de la partida (countdown/rondas/scores de equipo)
-  highScore: 2700 // récord histórico (cartel afuera de la arena)
+  highScore: 2700, // récord histórico (cartel afuera de la arena)
+  graffitiBase: 3000 // graffitis: 3000..3000+MAX (pool sincronizado, FIFO)
 }
 
 export function setupNet() {

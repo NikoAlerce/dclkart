@@ -4,6 +4,7 @@ import { engine, Transform, PlayerIdentityData } from '@dcl/sdk/ecs'
 import { getPlayer } from '@dcl/sdk/players'
 import { RaceState } from './raceState'
 import { PaintballState, KILLS_TO_WIN } from './paintballState'
+import { GraffitiState, GRAFFITI_PALETTE } from './graffitiState'
 import { getBotsForRadar } from './paintballBots'
 import { startPaintball, joinPaintball, exitPaintball } from './paintball'
 import { getMyAddr } from './net'
@@ -304,6 +305,40 @@ const uiComponent = () => {
               </UiEntity>
             </UiEntity>
           )}
+        </UiEntity>
+      )}
+
+      {/* ══════════ AEROSOL / GRAFFITI ══════════ */}
+      {!ps.inGame && !RaceState.isOccupied && (
+        <UiEntity uiTransform={{ width: '100%', height: '100%' }}>
+          {/* Reticle al centro (solo en modo aerosol) */}
+          {GraffitiState.sprayMode && (
+            <UiEntity uiTransform={{ positionType: 'absolute', position: { top: '50%', left: '50%' }, width: 12, height: 12, margin: { left: -6, top: -6 }, justifyContent: 'center', alignItems: 'center' }}
+              uiBackground={{ color: Color4.create(0, 0, 0, 0.6) }}>
+              <UiEntity uiTransform={{ width: 6, height: 6 }} uiBackground={{ color: Color4.create(1, 1, 1, 0.95) }} />
+            </UiEntity>
+          )}
+          {/* Paleta de colores (solo en modo aerosol) */}
+          {GraffitiState.sprayMode && (
+            <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 72, left: '50%' }, margin: { left: -(GRAFFITI_PALETTE.length * 32) / 2 }, width: GRAFFITI_PALETTE.length * 32, height: 42, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 4 }}
+              uiBackground={{ color: Color4.create(0.04, 0.04, 0.07, 0.82) }}>
+              {GRAFFITI_PALETTE.map((c, i) => {
+                const sel = GraffitiState.selectedColor === i
+                return (
+                  <UiEntity key={i}
+                    uiTransform={{ width: sel ? 30 : 24, height: sel ? 30 : 24, margin: { left: 3, right: 3 } }}
+                    uiBackground={{ color: Color4.create(c.r, c.g, c.b, 1) }}
+                    onMouseDown={() => { GraffitiState.selectedColor = i; GraffitiState.lastUiClickTime = Date.now() }} />
+                )
+              })}
+            </UiEntity>
+          )}
+          {/* Botón equipar/quitar aerosol */}
+          <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 24, left: '50%' }, margin: { left: -90 }, width: 180, height: 40, justifyContent: 'center', alignItems: 'center' }}
+            uiBackground={{ color: GraffitiState.sprayMode ? Color4.create(0.2, 0.7, 0.4, 0.95) : Color4.create(0.1, 0.1, 0.15, 0.85) }}
+            onMouseDown={() => { GraffitiState.sprayMode = !GraffitiState.sprayMode; GraffitiState.lastUiClickTime = Date.now() }}>
+            <Label value={GraffitiState.sprayMode ? '🎨 AEROSOL — clic para pintar' : '🎨 Aerosol'} fontSize={11} color={Color4.White()} />
+          </UiEntity>
         </UiEntity>
       )}
 

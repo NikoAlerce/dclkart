@@ -8,6 +8,7 @@ import { Vector3, Quaternion, Color4, Color3 } from '@dcl/sdk/math'
 import { syncEntity } from '@dcl/sdk/network'
 import { movePlayerTo } from '~system/RestrictedActions'
 import { RaceState } from './raceState'
+import { GraffitiState } from './graffitiState'
 import { isHost, SYNC_IDS } from './net'
 import { WORLD_Y_OFFSET } from './spawnConfig'
 
@@ -193,6 +194,7 @@ export function setupMonster(arbolesEntity?: Entity, screenVideo?: Entity) {
   pointerEventsSystem.onPointerDown(
     { entity: clickCollider, opts: { button: InputAction.IA_POINTER, hoverText: 'Subir al lomo', maxDistance: 120 } },
     () => {
+      if (GraffitiState.sprayMode) return // pintando con aerosol → el clic no sube al lomo
       if (RaceState.isOccupied) return
       if (RaceState.ridingMonster) return // ya estás arriba, no re-teletransportar
       const t = Transform.get(monster)

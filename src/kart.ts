@@ -15,6 +15,7 @@ import { RaceState } from './raceState'
 import type { KartConfig } from './kartConfig'
 import { DEFAULT_PHYSICS, KART_CONFIGS, PHYS_SCALE_CAP } from './kartConfig'
 import { getMyOwnerId } from './net'
+import { GraffitiState } from './graffitiState'
 
 // ─── Estacionamiento del avatar ───────────────────────────────────────────────
 // El avatar se teletransporta aquí al subirse. Alto (Y=100) para que
@@ -139,6 +140,7 @@ export function createKart(config: KartConfig): number {
   pointerEventsSystem.onPointerDown(
     { entity: kartClicker, opts: { button: InputAction.IA_POINTER, hoverText: 'Subirse al Kart' } },
     () => {
+      if (GraffitiState.sprayMode) return // pintando con aerosol → el clic no sube al kart
       const kartData  = KartData.getMutable(kartEntity)
       const ownership = KartOwner.getMutable(kartEntity)
 

@@ -13,6 +13,7 @@ import { ScreenState } from './screenState'
 import { setupStreaming, isStreamActive, LIVEKIT_SRC } from './streaming'
 import { Playlist } from './playlist'
 import { setupPaintball } from './paintball'
+import { setupGraffiti } from './graffiti'
 import { setupNet } from './net'
 
 
@@ -606,6 +607,9 @@ export function main() {
 
   // 8. Mini-juego: Paintball — NPC Referee cerca del spawn que invita a jugar.
   setupPaintball()
+
+  // 8.5 Graffiti / Aerosol: pintar en cualquier superficie, sincronizado (v1 en-sesión, FIFO).
+  setupGraffiti()
 
   // 7. Montado en el lomo: el avatar deja de colisionar con los árboles Y con el track
   // (que incluye los EDIFICIOS de la arena). El monstruo los atraviesa; así el rider también
