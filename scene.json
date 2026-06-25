@@ -3950,6 +3950,6 @@
   ],
   "allowedMediaHostnames": [
     "ipfs.io",
-    "tu-backend.onrender.com"
+    "graffiti-backend-k8qi.onrender.com"
   ]
 }

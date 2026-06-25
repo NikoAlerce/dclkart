@@ -12,17 +12,18 @@
 import { engine, Transform, MeshRenderer, Material, Entity } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion, Color3, Color4 } from '@dcl/sdk/math'
 
-// 👉 Reemplazá por la URL de tu backend (sin barra final).
-export const API_BASE = 'https://TU-BACKEND.onrender.com'
+// 👉 URL del backend deployado (sin barra final).
+export const API_BASE = 'https://graffiti-backend-k8qi.onrender.com'
 
 type PanelCfg = { id: string; center: Vector3; normal: Vector3; up: Vector3; width: number; height: number }
 
-// Paredes pintables. Mismo `id` que en el backend. center/normal/up en COORDS DE MUNDO,
-// medidas en metros. ⚠️ PLACEHOLDER — calibrar a paredes reales (del dust, plaza, etc.).
+// Tableros pintables. Mismo `id` que en el backend. center/normal/up en COORDS DE MUNDO,
+// medidas en metros. ⚠️ POSICIONES DE PRUEBA: tres tableros frente al spawn para probar.
+// Movelos donde quieras (o calibralos a paredes reales del dust/plaza).
 export const PANELS: PanelCfg[] = [
-  { id: 'wallA', center: Vector3.create(-197.0, 67.0, 100.0), normal: Vector3.create(0, 0, -1), up: Vector3.create(0, 1, 0), width: 12, height: 6 },
-  { id: 'wallB', center: Vector3.create(-205.0, 67.0, 100.0), normal: Vector3.create(0, 0, -1), up: Vector3.create(0, 1, 0), width: 12, height: 6 },
-  { id: 'wallC', center: Vector3.create(2.4, 86.0, 360.0),    normal: Vector3.create(1, 0, 0),  up: Vector3.create(0, 1, 0), width: 16, height: 8 }
+  { id: 'wallA', center: Vector3.create(-197.0, 67.0, 94.0), normal: Vector3.create(0, 0, -1), up: Vector3.create(0, 1, 0), width: 6, height: 4 },
+  { id: 'wallB', center: Vector3.create(-190.5, 67.0, 94.0), normal: Vector3.create(0, 0, -1), up: Vector3.create(0, 1, 0), width: 6, height: 4 },
+  { id: 'wallC', center: Vector3.create(-203.5, 67.0, 94.0), normal: Vector3.create(0, 0, -1), up: Vector3.create(0, 1, 0), width: 6, height: 4 }
 ]
 
 type PanelRT = { cfg: PanelCfg; entity: Entity; right: Vector3; nrm: Vector3; upn: Vector3; version: number }
@@ -44,10 +45,21 @@ export function setupGraffitiPanels() {
     const nrm = Vector3.normalize(cfg.normal)
     const upn = Vector3.normalize(cfg.up)
     const right = Vector3.normalize(Vector3.cross(upn, nrm))
+    const rot = Quaternion.lookRotation(nrm, upn)
+    // Tablero de fondo (opaco) → hace visible la pared pintable. Detrás del PNG.
+    const board = engine.addEntity()
+    Transform.create(board, {
+      position: Vector3.add(cfg.center, Vector3.scale(nrm, 0.01)),
+      rotation: rot,
+      scale: Vector3.create(cfg.width, cfg.height, 1)
+    })
+    MeshRenderer.setPlane(board)
+    Material.setPbrMaterial(board, { albedoColor: Color4.create(0.82, 0.80, 0.74, 1), roughness: 1, metallic: 0 })
+    // Plano del graffiti (PNG con alpha) al frente.
     const e = engine.addEntity()
     Transform.create(e, {
-      position: Vector3.add(cfg.center, Vector3.scale(nrm, 0.05)), // 5cm frente a la pared (anti z-fight)
-      rotation: Quaternion.lookRotation(nrm, upn),
+      position: Vector3.add(cfg.center, Vector3.scale(nrm, 0.06)), // 6cm frente al tablero
+      rotation: rot,
       scale: Vector3.create(cfg.width, cfg.height, 1)
     })
     MeshRenderer.setPlane(e)
