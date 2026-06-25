@@ -15,18 +15,20 @@ import { Vector3, Quaternion, Color3, Color4 } from '@dcl/sdk/math'
 // 👉 URL del backend deployado (sin barra final).
 export const API_BASE = 'https://graffiti-backend-k8qi.onrender.com'
 
-type PanelCfg = { id: string; center: Vector3; normal: Vector3; up: Vector3; width: number; height: number }
+// position/rotation/scale como cualquier objeto → EDITABLE EN EL EDITOR GLB.
+// scale.x = ancho, scale.y = alto (la pared es un plano). El frente (donde pintás) es
+// la cara +Z del plano rotada por `rotation`.
+type PanelCfg = { id: string; position: Vector3; rotation: Quaternion; scale: Vector3 }
 
-// Tableros pintables. Mismo `id` que en el backend. center/normal/up en COORDS DE MUNDO,
-// medidas en metros. ⚠️ POSICIONES DE PRUEBA: tres tableros frente al spawn para probar.
-// Movelos donde quieras (o calibralos a paredes reales del dust/plaza).
+// Tableros pintables. Mismo `id` que en el backend. ⚠️ POSICIONES DE PRUEBA: muévelos/
+// escalalos/rotalos desde el editor GLB (http://localhost:9000) y se guardan acá.
 export const PANELS: PanelCfg[] = [
-  { id: 'wallA', center: Vector3.create(-197.0, 65.5, 94.0), normal: Vector3.create(0, 0, -1), up: Vector3.create(0, 1, 0), width: 6, height: 4 },
-  { id: 'wallB', center: Vector3.create(-190.5, 65.5, 94.0), normal: Vector3.create(0, 0, -1), up: Vector3.create(0, 1, 0), width: 6, height: 4 },
-  { id: 'wallC', center: Vector3.create(-203.5, 65.5, 94.0), normal: Vector3.create(0, 0, -1), up: Vector3.create(0, 1, 0), width: 6, height: 4 }
+  { id: 'wallA', position: Vector3.create(-197.00, 65.50, 94.00), rotation: Quaternion.create(0.0000, 1.0000, 0.0000, 0.0000), scale: Vector3.create(6.000, 4.000, 1.000) },
+  { id: 'wallB', position: Vector3.create(-190.5, 65.5, 94.0), rotation: Quaternion.create(0.0, 1.0, 0.0, 0.0), scale: Vector3.create(6.0, 4.0, 1.0) },
+  { id: 'wallC', position: Vector3.create(-203.5, 65.5, 94.0), rotation: Quaternion.create(0.0, 1.0, 0.0, 0.0), scale: Vector3.create(6.0, 4.0, 1.0) }
 ]
 
-type PanelRT = { cfg: PanelCfg; entity: Entity; right: Vector3; nrm: Vector3; upn: Vector3; version: number }
+type PanelRT = { cfg: PanelCfg; entity: Entity; right: Vector3; nrm: Vector3; upn: Vector3; w: number; h: number; version: number }
 const rts: PanelRT[] = []
 
 // Batch de manchas por panel, se vacía cada FLUSH_MS en un solo POST.
@@ -42,32 +44,23 @@ export function setupGraffitiPanels() {
     return
   }
   for (const cfg of PANELS) {
-    const nrm = Vector3.normalize(cfg.normal)
-    const upn = Vector3.normalize(cfg.up)
-    const right = Vector3.normalize(Vector3.cross(upn, nrm))
-    const rot = Quaternion.lookRotation(nrm, upn)
+    const rot = cfg.rotation
+    const nrm = Vector3.rotate(Vector3.Forward(), rot)   // cara frontal del plano
+    const upn = Vector3.rotate(Vector3.Up(), rot)
+    const right = Vector3.rotate(Vector3.Right(), rot)
+    const w = cfg.scale.x, h = cfg.scale.y
     // Tablero de fondo (opaco) → hace visible la pared pintable. Detrás del PNG.
     const board = engine.addEntity()
-    Transform.create(board, {
-      position: Vector3.add(cfg.center, Vector3.scale(nrm, 0.01)),
-      rotation: rot,
-      scale: Vector3.create(cfg.width, cfg.height, 1)
-    })
+    Transform.create(board, { position: Vector3.add(cfg.position, Vector3.scale(nrm, 0.01)), rotation: rot, scale: Vector3.create(w, h, 1) })
     MeshRenderer.setPlane(board)
     Material.setPbrMaterial(board, { albedoColor: Color4.create(0.82, 0.80, 0.74, 1), roughness: 1, metallic: 0 })
-    // Plano del graffiti (PNG con alpha) al frente.
+    // Plano del graffiti (PNG con alpha) al frente + collider (para que el rayo lo detecte).
     const e = engine.addEntity()
-    Transform.create(e, {
-      position: Vector3.add(cfg.center, Vector3.scale(nrm, 0.06)), // 6cm frente al tablero
-      rotation: rot,
-      scale: Vector3.create(cfg.width, cfg.height, 1)
-    })
+    Transform.create(e, { position: Vector3.add(cfg.position, Vector3.scale(nrm, 0.06)), rotation: rot, scale: Vector3.create(w, h, 1) })
     MeshRenderer.setPlane(e)
-    // Collider para que el RAYO del aerosol pegue en el panel (sin esto lo atraviesa y
-    // pinta lo de atrás → "no me deja pintar sobre ellos").
     MeshCollider.setPlane(e, ColliderLayer.CL_PHYSICS)
     applyTex(e, cfg.id, 0)
-    rts.push({ cfg, entity: e, right, nrm, upn, version: 0 })
+    rts.push({ cfg, entity: e, right, nrm, upn, w, h, version: 0 })
   }
   engine.addSystem(panelSystem)
 }
@@ -89,13 +82,13 @@ function applyTex(e: Entity, id: string, version: number) {
 /** Si `world` cae sobre algún panel pintable, devuelve {id, u, v} (u,v en 0..1). */
 export function panelHitUV(world: Vector3): { id: string; u: number; v: number } | null {
   for (const rt of rts) {
-    const vx = world.x - rt.cfg.center.x, vy = world.y - rt.cfg.center.y, vz = world.z - rt.cfg.center.z
+    const vx = world.x - rt.cfg.position.x, vy = world.y - rt.cfg.position.y, vz = world.z - rt.cfg.position.z
     const distN = vx * rt.nrm.x + vy * rt.nrm.y + vz * rt.nrm.z
     if (Math.abs(distN) > 0.6) continue // no está sobre el plano de la pared
     const du = vx * rt.right.x + vy * rt.right.y + vz * rt.right.z
     const dv = vx * rt.upn.x + vy * rt.upn.y + vz * rt.upn.z
-    const u = du / rt.cfg.width + 0.5
-    const v = dv / rt.cfg.height + 0.5
+    const u = du / rt.w + 0.5
+    const v = dv / rt.h + 0.5
     if (u < 0 || u > 1 || v < 0 || v > 1) continue
     return { id: rt.cfg.id, u, v }
   }
@@ -107,7 +100,7 @@ export function paintPanel(id: string, u: number, v: number, c: { r: number; g: 
   const rt = rts.find((r) => r.cfg.id === id)
   if (!rt) return
   const list = pending.get(id) || []
-  list.push({ u, v, r: c.r, g: c.g, b: c.b, size: Math.max(0.005, sizeM / rt.cfg.width) })
+  list.push({ u, v, r: c.r, g: c.g, b: c.b, size: Math.max(0.005, sizeM / rt.w) })
   pending.set(id, list)
 }
 

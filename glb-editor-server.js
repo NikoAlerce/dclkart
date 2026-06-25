@@ -13,6 +13,7 @@ const INDEX_TS         = path.join(__dirname, 'src', 'index.ts')
 const KART_CONFIG_PATH = path.join(__dirname, 'src', 'kartConfig.ts')
 const SPAWN_CONFIG_TS  = path.join(__dirname, 'src', 'spawnConfig.ts')
 const SCENE_JSON       = path.join(__dirname, 'scene.json')
+const PANELS_PATH      = path.join(__dirname, 'src', 'graffitiPanels.ts')
 
 // ── WORLD_Y_OFFSET: las entidades de index.ts guardan la Y "a nivel piso" (literal en
 // Vector3.create) y el runtime les SUMA este offset en una línea aparte
@@ -190,6 +191,46 @@ function parseSpawnArea() {
     },
     isSpawnArea: true
   }]
+}
+
+// ── PARSER: paneles de graffiti (src/graffitiPanels.ts) ───────
+function parsePanels() {
+  if (!fs.existsSync(PANELS_PATH)) return []
+  const src = fs.readFileSync(PANELS_PATH, 'utf8')
+  const out = []
+  const re = /\{\s*id:\s*'([^']+)',\s*position:\s*Vector3\.create\(([^)]+)\),\s*rotation:\s*Quaternion\.create\(([^)]+)\),\s*scale:\s*Vector3\.create\(([^)]+)\)\s*\}/g
+  let m
+  while ((m = re.exec(src)) !== null) {
+    const id = m[1]
+    const p = m[2].split(',').map(s => parseFloat(s.trim()))
+    const r = m[3].split(',').map(s => parseFloat(s.trim()))
+    const s = m[4].split(',').map(s => parseFloat(s.trim()))
+    out.push({
+      varName: `panel_${id}`,
+      src: 'GRAFFITI_PANEL', // dummy → el editor lo dibuja como plano
+      position: { x: p[0]||0, y: p[1]||0, z: p[2]||0 },
+      rotation: { x: r[0]||0, y: r[1]||0, z: r[2]||0, w: r[3]!==undefined?r[3]:1 },
+      scale:    { x: s[0]||1, y: s[1]||1, z: s[2]||1 },
+      isPanel: true,
+      panelId: id
+    })
+  }
+  return out
+}
+
+// ── WRITER: actualiza un panel de graffiti (position/rotation/scale) ─────
+function updatePanel(id, x, y, z, rx, ry, rz, rw, sx, sy, sz) {
+  let src = fs.readFileSync(PANELS_PATH, 'utf8')
+  const re = new RegExp(
+    `(\\{\\s*id:\\s*'${id}',\\s*position:\\s*Vector3\\.create\\()[^)]+(\\),\\s*rotation:\\s*Quaternion\\.create\\()[^)]+(\\),\\s*scale:\\s*Vector3\\.create\\()[^)]+(\\)\\s*\\})`
+  )
+  let replaced = false
+  src = src.replace(re, (mm, pre, mid1, mid2, post) => {
+    replaced = true
+    return `${pre}${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)}${mid1}${rx.toFixed(4)}, ${ry.toFixed(4)}, ${rz.toFixed(4)}, ${rw.toFixed(4)}${mid2}${sx.toFixed(3)}, ${sy.toFixed(3)}, ${(sz!==undefined?sz:1).toFixed(3)}${post}`
+  })
+  if (!replaced) throw new Error(`No se encontró el panel '${id}' en graffitiPanels.ts`)
+  fs.writeFileSync(PANELS_PATH, src, 'utf8')
 }
 
 // ── WRITER: actualiza posición de una entidad en index.ts ─────
@@ -493,7 +534,8 @@ http.createServer((req, res) => {
       const sceneEnts = parseIndexTs()
       const kartEnts = parseKartConfigs()
       const spawnEnts = parseSpawnArea()
-      json(res, [...sceneEnts, ...kartEnts, ...spawnEnts])
+      const panelEnts = parsePanels()
+      json(res, [...sceneEnts, ...kartEnts, ...spawnEnts, ...panelEnts])
     }
     catch(e) { json(res, {error: e.message}, 500) }
     return
@@ -513,6 +555,9 @@ http.createServer((req, res) => {
           const { varName, x, y, z, rx, ry, rz, rw, sx, sy, sz } = update
           if (varName === 'spawn_area') {
             updateSpawnArea(x, y, z, rx, ry, rz, rw, sx, sy, sz)
+          } else if (varName.startsWith('panel_')) {
+            const id = varName.slice('panel_'.length)
+            updatePanel(id, x, y, z, rx, ry, rz, rw, sx, sy, sz)
           } else if (varName.startsWith('kart_')) {
             const id = parseInt(varName.split('_')[1])
             if (rx !== undefined && sx !== undefined) {

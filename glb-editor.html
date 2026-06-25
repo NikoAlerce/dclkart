@@ -1148,10 +1148,40 @@ function createSpawnAreaMesh() {
   }
 }
 
+// ── PANELES DE GRAFFITI (planos editables) ────────────────────
+function createPanelMeshes() {
+  const panelEnts = ents.filter(e => e.isPanel)
+  for (const pe of panelEnts) {
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({ color: 0xff4fa8, transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false })
+    )
+    mesh.position.set(pe.position.x, pe.position.y, pe.position.z)
+    if (pe.rotation) mesh.quaternion.set(pe.rotation.x, pe.rotation.y, pe.rotation.z, pe.rotation.w)
+    mesh.scale.set(pe.scale.x, pe.scale.y, pe.scale.z || 1)
+    scene.add(mesh)
+    // borde
+    mesh.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0xff9ed6, wireframe: true, side: THREE.DoubleSide })))
+    // indicador del FRENTE (la cara que se pinta = +Z local) — esfera celeste, contra-escalada
+    const front = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 10), new THREE.MeshBasicMaterial({ color: 0x00e5ff }))
+    front.position.set(0, 0, 0.5)
+    front.scale.set(1 / pe.scale.x, 1 / pe.scale.y, 1)
+    mesh.add(front)
+
+    const bbox = new THREE.Box3().setFromObject(mesh)
+    const bboxHelper = new THREE.Box3Helper(bbox, new THREE.Color(0xff4fa8))
+    bboxHelper.visible = showBBox
+    scene.add(bboxHelper)
+    loaded[pe.varName] = { root: mesh, bbox, bboxHelper }
+    mesh.userData = { isEntity: true, entityIndex: ents.indexOf(pe), varName: pe.varName, filename: pe.varName }
+  }
+}
+
 // ── INIT ──────────────────────────────────────────────────────
 async function init() {
   await Promise.all([fetchWorldInfo(), fetchEntities(), fetchModels()])
   createSpawnAreaMesh()
+  createPanelMeshes()
   loadAll()
 }
 init()
