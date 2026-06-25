@@ -12,10 +12,10 @@ import { Vector3, Quaternion, Color4, Color3 } from '@dcl/sdk/math'
 import { movePlayerTo } from '~system/RestrictedActions'
 import { GraffitiState, GraffitiMission } from './graffitiState'
 import { onGraffitiPaint } from './graffiti'
-import { ARENA_CENTER, ArenaCalibration } from './paintballArena'
+import { FFA_SPAWNS } from './paintballArena'
 
 const MISSION_TIME = 150        // segundos para completar
-const TAG_RADIUS   = 4.5        // qué tan cerca hay que pintar para taguear un spot
+const TAG_RADIUS   = 5.0        // qué tan cerca hay que pintar para taguear un spot
 // NPC cerca del spawn de karts (tunable). Y ≈ piso del paddock.
 const NPC_POS = Vector3.create(-193.0, 64.5, 94.0)
 const SPAWN_BACK = Vector3.create(-197.4, 66.0, 89.8) // a dónde volver al salir
@@ -24,18 +24,11 @@ type Target = { pos: Vector3; marker: Entity; tagged: boolean }
 const targets: Target[] = []
 let timerAccum = 0
 
-// Spots a taguear, en el área DUST (= arena paintball). ⚠️ PLACEHOLDER — calibrar
-// visualmente: que cada spot quede pegado a una pared/superficie taggeable.
+// Spots a taguear: reusamos los FFA_SPAWNS del paintball, que se calibran EN RUNTIME
+// (raycast por punto) al piso real del dust multinivel → garantizan estar SOBRE el piso,
+// no debajo. Los flotamos un toque para que el aro se vea. (Se pueden afinar a paredes.)
 function buildTargetSpots(): Vector3[] {
-  const cx = ARENA_CENTER.x, cy = (ArenaCalibration.floorY || 74) + 3, cz = ARENA_CENTER.z
-  return [
-    Vector3.create(cx - 22, cy, cz - 30),
-    Vector3.create(cx + 24, cy, cz - 8),
-    Vector3.create(cx - 26, cy, cz + 28),
-    Vector3.create(cx + 20, cy + 1, cz + 40),
-    Vector3.create(cx, cy + 2, cz + 5),
-    Vector3.create(cx + 32, cy, cz + 65)
-  ]
+  return FFA_SPAWNS.map(s => Vector3.create(s.x, s.y + 1.8, s.z))
 }
 
 export function setupGraffitiMission() {
@@ -113,8 +106,9 @@ export function startMission() {
     targets.push({ pos: p, marker, tagged: false })
   }
 
-  // Llevar al jugador al centro del área dust.
-  movePlayerTo({ newRelativePosition: Vector3.create(ARENA_CENTER.x, (ArenaCalibration.floorY || 74) + 1.5, ARENA_CENTER.z) }).catch(() => {})
+  // Llevar al jugador a un spawn calibrado del dust (sobre el piso real).
+  const e = FFA_SPAWNS[0]
+  movePlayerTo({ newRelativePosition: Vector3.create(e.x, e.y + 0.5, e.z) }).catch(() => {})
 }
 
 function completeMission() {

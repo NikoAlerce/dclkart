@@ -261,25 +261,38 @@ function graffitiSystem(dt: number) {
     const holding = !uiClick && inputSystem.isPressed(InputAction.IA_POINTER)
     if (holding && hit && hit.position && hit.normalHit) {
       const p = Vector3.create(hit.position.x, hit.position.y, hit.position.z)
+      const n = hit.normalHit
       const base = GRAFFITI_SIZES[GraffitiState.selectedSize] || 1.0
-      const spacing = base * 0.35
+      const spacing = base * 0.22   // denso → las manchas se solapan = trazo CONTINUO
       const author = getPlayer()?.name || 'anon'
-      const moved = !lastDotPos || Vector3.distance(p, lastDotPos) >= spacing
 
-      if (moved) {
-        // Punto nuevo (trazo): el cursor se movió → línea fluida sin inundar.
-        lastDotPos = p; stillTime = 0; growAccum = 0
+      // Coloca UNA mancha en (px,py,pz) con la normal actual.
+      const emitDot = (px: number, py: number, pz: number) => {
         if (GraffitiState.eraser) {
-          graffitiBus.emit('gErase', { x: p.x, y: p.y, z: p.z, r: base })
+          graffitiBus.emit('gErase', { x: px, y: py, z: pz, r: base })
         } else {
           const c = strokeColor()
-          graffitiBus.emit('gPaint', {
-            x: hit.position.x, y: hit.position.y, z: hit.position.z,
-            nx: hit.normalHit.x, ny: hit.normalHit.y, nz: hit.normalHit.z,
-            r: c.r, g: c.g, b: c.b, brush: GraffitiState.selectedBrush, size: base, author
-          })
-          for (const l of paintListeners) l(hit.position.x, hit.position.y, hit.position.z)
+          graffitiBus.emit('gPaint', { x: px, y: py, z: pz, nx: n.x, ny: n.y, nz: n.z, r: c.r, g: c.g, b: c.b, brush: GraffitiState.selectedBrush, size: base, author })
+          for (const l of paintListeners) l(px, py, pz)
         }
+      }
+
+      const moved = !lastDotPos || Vector3.distance(p, lastDotPos) >= spacing
+      if (moved) {
+        stillTime = 0; growAccum = 0
+        if (!lastDotPos) {
+          emitDot(p.x, p.y, p.z)   // primer punto del trazo
+        } else {
+          // INTERPOLAR entre el último punto y el actual → línea continua aunque barras
+          // rápido (entre frames quedaban huecos = el "punteado"). Tope por frame.
+          const dist = Vector3.distance(p, lastDotPos)
+          const steps = Math.min(16, Math.floor(dist / spacing))
+          const dir = Vector3.normalize(Vector3.subtract(p, lastDotPos))
+          for (let i = 1; i <= steps; i++) {
+            emitDot(lastDotPos.x + dir.x * spacing * i, lastDotPos.y + dir.y * spacing * i, lastDotPos.z + dir.z * spacing * i)
+          }
+        }
+        lastDotPos = p
       } else if (!GraffitiState.eraser) {
         // SATURACIÓN: quieto en el mismo lugar → la mancha CRECE (como un aerosol real).
         stillTime += dt; growAccum += dt
