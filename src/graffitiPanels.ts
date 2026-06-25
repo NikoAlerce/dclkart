@@ -9,7 +9,7 @@
 //   2) Agregá el host de API_BASE a scene.json → "allowedMediaHostnames".
 //   3) Calibrá los PANELS (center/normal/up/medidas) a paredes reales del mundo.
 
-import { engine, Transform, MeshRenderer, Material, Entity } from '@dcl/sdk/ecs'
+import { engine, Transform, MeshRenderer, MeshCollider, ColliderLayer, Material, Entity } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion, Color3, Color4 } from '@dcl/sdk/math'
 
 // 👉 URL del backend deployado (sin barra final).
@@ -21,9 +21,9 @@ type PanelCfg = { id: string; center: Vector3; normal: Vector3; up: Vector3; wid
 // medidas en metros. ⚠️ POSICIONES DE PRUEBA: tres tableros frente al spawn para probar.
 // Movelos donde quieras (o calibralos a paredes reales del dust/plaza).
 export const PANELS: PanelCfg[] = [
-  { id: 'wallA', center: Vector3.create(-197.0, 67.0, 94.0), normal: Vector3.create(0, 0, -1), up: Vector3.create(0, 1, 0), width: 6, height: 4 },
-  { id: 'wallB', center: Vector3.create(-190.5, 67.0, 94.0), normal: Vector3.create(0, 0, -1), up: Vector3.create(0, 1, 0), width: 6, height: 4 },
-  { id: 'wallC', center: Vector3.create(-203.5, 67.0, 94.0), normal: Vector3.create(0, 0, -1), up: Vector3.create(0, 1, 0), width: 6, height: 4 }
+  { id: 'wallA', center: Vector3.create(-197.0, 65.5, 94.0), normal: Vector3.create(0, 0, -1), up: Vector3.create(0, 1, 0), width: 6, height: 4 },
+  { id: 'wallB', center: Vector3.create(-190.5, 65.5, 94.0), normal: Vector3.create(0, 0, -1), up: Vector3.create(0, 1, 0), width: 6, height: 4 },
+  { id: 'wallC', center: Vector3.create(-203.5, 65.5, 94.0), normal: Vector3.create(0, 0, -1), up: Vector3.create(0, 1, 0), width: 6, height: 4 }
 ]
 
 type PanelRT = { cfg: PanelCfg; entity: Entity; right: Vector3; nrm: Vector3; upn: Vector3; version: number }
@@ -63,6 +63,9 @@ export function setupGraffitiPanels() {
       scale: Vector3.create(cfg.width, cfg.height, 1)
     })
     MeshRenderer.setPlane(e)
+    // Collider para que el RAYO del aerosol pegue en el panel (sin esto lo atraviesa y
+    // pinta lo de atrás → "no me deja pintar sobre ellos").
+    MeshCollider.setPlane(e, ColliderLayer.CL_PHYSICS)
     applyTex(e, cfg.id, 0)
     rts.push({ cfg, entity: e, right, nrm, upn, version: 0 })
   }
