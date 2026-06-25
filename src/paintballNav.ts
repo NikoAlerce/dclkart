@@ -63,6 +63,7 @@ export function setupNav() {
 export function startNavSampling() {
   if (started) return
   started = true
+  navPhase = 1
 
   const nx = Math.ceil((ARENA_BOUNDS.maxX - ARENA_BOUNDS.minX) / CELL)
   const nz = Math.ceil((ARENA_BOUNDS.maxZ - ARENA_BOUNDS.minZ) / CELL)
@@ -115,9 +116,17 @@ function recordCell(ix: number, iz: number, e: Entity) {
   cellNodes.set(key, list)
 }
 
-function buildEdges() {
+// Fase 2: candidatos de arista (pares de nodos vecinos a altura caminable). NO se
+// conectan directo: cada par se valida con un rayo horizontal (¿hay pared en el medio?).
+type EdgeCand = [number, number]
+let edgeQueue: EdgeCand[] = []
+const edgeSlot: Array<EdgeCand | null> = []
+let navPhase: 0 | 1 | 2 = 0   // 0 idle, 1 muestreo de piso, 2 chequeo de paredes
+
+function collectEdgeCandidates() {
   const nx = Math.ceil((ARENA_BOUNDS.maxX - ARENA_BOUNDS.minX) / CELL)
   const nz = Math.ceil((ARENA_BOUNDS.maxZ - ARENA_BOUNDS.minZ) / CELL)
+  const seen = new Set<string>()
   for (let ix = 0; ix < nx; ix++) {
     for (let iz = 0; iz < nz; iz++) {
       const here = cellNodes.get(ix + '_' + iz)
@@ -129,9 +138,12 @@ function buildEdges() {
           if (!there) continue
           for (const a of here) {
             for (const b of there) {
-              if (Math.abs(nodes[a].y - nodes[b].y) <= STEP_MAX) {
-                if (!nodes[a].edges.includes(b)) nodes[a].edges.push(b)
-              }
+              if (Math.abs(nodes[a].y - nodes[b].y) > STEP_MAX) continue
+              const lo = Math.min(a, b), hi = Math.max(a, b)
+              const key = lo + '_' + hi
+              if (seen.has(key)) continue
+              seen.add(key)
+              edgeQueue.push([lo, hi])
             }
           }
         }
@@ -140,44 +152,87 @@ function buildEdges() {
   }
 }
 
+// ¿Hay PARED del track entre los dos nodos? (lee el rayo horizontal lanzado el frame previo)
+function edgeBlocked(e: Entity, a: number, b: number): boolean {
+  const res = RaycastResult.getOrNull(e)
+  if (!res || res.hits.length === 0) return false
+  const horiz = Math.hypot(nodes[b].x - nodes[a].x, nodes[b].z - nodes[a].z)
+  for (const h of res.hits) {
+    if (!h.position || h.length == null) continue
+    if (h.entityId !== undefined && h.entityId !== trackEntity && !isChildOf(h.entityId as Entity, trackEntity)) continue
+    if (h.length < horiz - 0.6) return true // pega en algo del track ANTES de llegar al otro nodo
+  }
+  return false
+}
+
 function navSampleSystem(_dt: number) {
   if (!started || ready) return
 
-  for (let i = 0; i < pool.length; i++) {
-    const e = pool[i]
-    // Leer el resultado de la celda asignada el frame anterior
-    if (poolCell[i]) {
-      recordCell(poolCell[i]![0], poolCell[i]![1], e)
-      poolCell[i] = null
+  // ── FASE 1: muestreo de piso (rayo vertical por celda) ──
+  if (navPhase === 1) {
+    for (let i = 0; i < pool.length; i++) {
+      const e = pool[i]
+      if (poolCell[i]) { recordCell(poolCell[i]![0], poolCell[i]![1], e); poolCell[i] = null }
+      const next = queue.pop()
+      if (next) {
+        const w = cellWorld(next[0], next[1])
+        const t = Transform.getMutable(e)
+        t.position.x = w.x; t.position.z = w.z; t.position.y = ARENA_Y_SAMPLE.top
+        Raycast.createOrReplace(e, {
+          direction: { $case: 'globalDirection', globalDirection: Vector3.create(0, -1, 0) },
+          maxDistance: ARENA_Y_SAMPLE.top - ARENA_Y_SAMPLE.bottom + 5,
+          queryType: RaycastQueryType.RQT_QUERY_ALL, collisionMask: ColliderLayer.CL_PHYSICS, continuous: false
+        })
+        poolCell[i] = next
+      }
     }
-    // Asignar la próxima celda
-    const next = queue.pop()
-    if (next) {
-      const w = cellWorld(next[0], next[1])
-      const t = Transform.getMutable(e)
-      t.position.x = w.x
-      t.position.z = w.z
-      t.position.y = ARENA_Y_SAMPLE.top
-      Raycast.createOrReplace(e, {
-        direction: { $case: 'globalDirection', globalDirection: Vector3.create(0, -1, 0) },
-        maxDistance: ARENA_Y_SAMPLE.top - ARENA_Y_SAMPLE.bottom + 5,
-        queryType: RaycastQueryType.RQT_QUERY_ALL,
-        collisionMask: ColliderLayer.CL_PHYSICS,
-        continuous: false
-      })
-      poolCell[i] = next
+    if (queue.length === 0 && poolCell.every((c) => c === null)) {
+      // Pasar a FASE 2: armar candidatos de arista y validarlos con rayos horizontales.
+      collectEdgeCandidates()
+      for (let i = 0; i < pool.length; i++) edgeSlot[i] = null
+      navPhase = 2
+      console.log(`[NAV] Piso: ${nodes.length} nodos. Validando ${edgeQueue.length} aristas (paredes)...`)
     }
+    return
   }
 
-  // ¿Terminó? (queue vacía y nada pendiente de leer)
-  if (queue.length === 0 && poolCell.every((c) => c === null)) {
-    buildEdges()
-    // Limpiar el pool de muestreo
-    for (const e of pool) engine.removeEntity(e)
-    pool.length = 0
-    ready = nodes.length > 0
-    started = ready // si no hay nodos, permitir re-intento (coords malas)
-    console.log(`[NAV] Muestreo completo: ${nodes.length} nodos. Bounds: X[${ARENA_BOUNDS.minX}..${ARENA_BOUNDS.maxX}] Z[${ARENA_BOUNDS.minZ}..${ARENA_BOUNDS.maxZ}]. YSample: [${ARENA_Y_SAMPLE.bottom.toFixed(1)}..${ARENA_Y_SAMPLE.top.toFixed(1)}]. Ready=${ready}`)
+  // ── FASE 2: validar cada arista con un rayo horizontal (no cruzar paredes) ──
+  if (navPhase === 2) {
+    for (let i = 0; i < pool.length; i++) {
+      const e = pool[i]
+      const cur = edgeSlot[i]
+      if (cur) {
+        if (!edgeBlocked(e, cur[0], cur[1])) {
+          if (!nodes[cur[0]].edges.includes(cur[1])) nodes[cur[0]].edges.push(cur[1])
+          if (!nodes[cur[1]].edges.includes(cur[0])) nodes[cur[1]].edges.push(cur[0])
+        }
+        edgeSlot[i] = null
+      }
+      const cand = edgeQueue.pop()
+      if (cand) {
+        const da = nodes[cand[0]], db = nodes[cand[1]]
+        const dirx = db.x - da.x, dirz = db.z - da.z
+        const horiz = Math.hypot(dirx, dirz) || 1
+        const t = Transform.getMutable(e)
+        t.position.x = da.x; t.position.z = da.z; t.position.y = Math.max(da.y, db.y) + 1.2
+        Raycast.createOrReplace(e, {
+          direction: { $case: 'globalDirection', globalDirection: Vector3.create(dirx / horiz, 0, dirz / horiz) },
+          maxDistance: horiz, queryType: RaycastQueryType.RQT_QUERY_ALL,
+          collisionMask: ColliderLayer.CL_PHYSICS, continuous: false
+        })
+        edgeSlot[i] = cand
+      }
+    }
+    if (edgeQueue.length === 0 && edgeSlot.every((c) => c === null)) {
+      for (const e of pool) engine.removeEntity(e)
+      pool.length = 0
+      ready = nodes.length > 0
+      started = ready
+      navPhase = 0
+      let edgeCount = 0
+      for (const n of nodes) edgeCount += n.edges.length
+      console.log(`[NAV] Listo: ${nodes.length} nodos, ${edgeCount / 2} aristas (paredes respetadas). Ready=${ready}`)
+    }
   }
 }
 
