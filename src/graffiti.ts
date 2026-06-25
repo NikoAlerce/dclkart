@@ -25,7 +25,7 @@ import { RaceState } from './raceState'
 
 const graffitiBus = new MessageBus()
 
-const MAX_GRAFFITI = 150          // cupo (FIFO): al pasarse, se reusa el más viejo
+const MAX_GRAFFITI = 200          // cupo (FIFO): al pasarse, se reusa el más viejo
 const SPRAY_RANGE  = 40           // alcance del aerosol (m)
 
 // Componente sincronizado por slot. El visual (plano) se deriva localmente de estos datos.
@@ -53,8 +53,6 @@ type EraseMsg = { x: number; y: number; z: number; r: number }
 
 let rayEntity: Entity
 let canEntity: Entity | null = null
-let canCap: Entity | null = null
-let lastCanColor = -1
 let lastDotPos: Vector3 | null = null   // último punto pintado (espaciado del trazo)
 let rainbowHue = 0
 let stillTime = 0    // tiempo quieto en el mismo punto → saturación (la mancha crece)
@@ -189,34 +187,21 @@ function applySlotVisual(s: Slot, d: ReturnType<typeof GraffitiData.get>) {
   })
 }
 
-// Aerosol en mano: modelo GLB + una tapa/orbe teñido del color elegido (feedback).
+// Aerosol en mano: el modelo GLB, CENTRADO justo debajo de la mira.
 function updateCan() {
   if (GraffitiState.sprayMode && !RaceState.isOccupied) {
     if (!canEntity) {
       canEntity = engine.addEntity()
       Transform.create(canEntity, {
         parent: engine.CameraEntity,
-        position: Vector3.create(0.34, -0.38, 0.62),
-        rotation: Quaternion.fromEulerDegrees(8, -8, 6),
-        scale: Vector3.One()
+        position: Vector3.create(0, -0.32, 0.55), // x=0 centrado, abajo de la mira
+        rotation: Quaternion.fromEulerDegrees(-12, 0, 0),
+        scale: Vector3.create(0.09, 0.09, 0.09)   // el GLB mide ~1.9m → lata de mano
       })
-      // El GLB (mide ~1.9m → escalar a tamaño de lata de mano).
-      const model = engine.addEntity()
-      Transform.create(model, { parent: canEntity, position: Vector3.Zero(), scale: Vector3.create(0.12, 0.12, 0.12) })
-      GltfContainer.create(model, { src: 'assets/models/aerosol.glb' })
-      // Orbe sobre la lata teñido del color elegido (el GLB no se puede teñir).
-      canCap = engine.addEntity()
-      Transform.create(canCap, { parent: canEntity, position: Vector3.create(0, 0.135, 0), scale: Vector3.create(0.045, 0.045, 0.045) })
-      MeshRenderer.setSphere(canCap)
-      lastCanColor = -1
-    }
-    if (lastCanColor !== GraffitiState.selectedColor && canCap) {
-      lastCanColor = GraffitiState.selectedColor
-      const c = GRAFFITI_PALETTE[GraffitiState.selectedColor] || GRAFFITI_PALETTE[0]
-      Material.setPbrMaterial(canCap, { albedoColor: Color4.create(c.r, c.g, c.b, 1), emissiveColor: c, emissiveIntensity: 1.6, roughness: 1, metallic: 0 })
+      GltfContainer.create(canEntity, { src: 'assets/models/aerosol.glb' })
     }
   } else if (canEntity) {
-    engine.removeEntityWithChildren(canEntity); canEntity = null
+    engine.removeEntity(canEntity); canEntity = null
   }
 }
 
@@ -271,7 +256,7 @@ function graffitiSystem(dt: number) {
       const p = Vector3.create(hit.position.x, hit.position.y, hit.position.z)
       const n = hit.normalHit
       const base = GRAFFITI_SIZES[GraffitiState.selectedSize] || 1.0
-      const spacing = base * 0.22   // denso → las manchas se solapan = trazo CONTINUO
+      const spacing = base * 0.35   // las manchas se solapan (=trazo continuo) pero con menos puntos → más graffiti antes de reciclar
       const author = getPlayer()?.name || 'anon'
 
       // Coloca UNA mancha en (px,py,pz) con la normal actual.
