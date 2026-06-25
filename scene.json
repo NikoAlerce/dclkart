@@ -3949,6 +3949,7 @@
     "ALLOW_MEDIA_HOSTNAMES"
   ],
   "allowedMediaHostnames": [
-    "ipfs.io"
+    "ipfs.io",
+    "tu-backend.onrender.com"
   ]
 }

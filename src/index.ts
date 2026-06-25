@@ -1,6 +1,6 @@
-import { engine, Transform, GltfContainer, ColliderLayer, Raycast, RaycastResult, RaycastQueryType, MeshRenderer, Material, VideoPlayer, VideoEvent, Entity } from '@dcl/sdk/ecs'
+import { engine, Transform, GltfContainer, ColliderLayer, Raycast, RaycastResult, RaycastQueryType, MeshRenderer, Material, VideoPlayer, VideoEvent, Entity, pointerEventsSystem, InputAction } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion, Color4 } from '@dcl/sdk/math'
-import { movePlayerTo } from '~system/RestrictedActions'
+import { movePlayerTo, triggerEmote } from '~system/RestrictedActions'
 import { kartMovementSystem, turboParticleSystem } from './kartSystem'
 import { scanAndConvertKarts, spawnedModelEntities } from './kart'
 import { setupUi } from './ui'
@@ -14,6 +14,7 @@ import { setupStreaming, isStreamActive, LIVEKIT_SRC } from './streaming'
 import { Playlist } from './playlist'
 import { setupPaintball } from './paintball'
 import { setupGraffiti } from './graffiti'
+import { setupGraffitiPanels } from './graffitiPanels'
 import { setupGraffitiMission } from './graffitiMission'
 import { setupNet } from './net'
 
@@ -112,6 +113,83 @@ export function main() {
 
   // 1.6.1 Campo de batalla de paintball ya está incluido dentro de track.glb
 
+  // 1.6.2 Couch 1
+  const couch1 = engine.addEntity()
+  spawnedModelEntities.add(couch1)
+  GltfContainer.create(couch1, {
+    src: 'assets/models/couch1.glb',
+    invisibleMeshesCollisionMask: ColliderLayer.CL_PHYSICS,
+    visibleMeshesCollisionMask:   ColliderLayer.CL_PHYSICS | ColliderLayer.CL_POINTER
+  })
+  Transform.create(couch1, {
+    position: Vector3.create(-212.22, 15.91, 113.59),
+    rotation: Quaternion.create(0.0000, -0.5869, 0.0000, 0.8096),
+    scale: Vector3.create(6.308, 6.308, 6.308)
+  })
+  Transform.getMutable(couch1).position.y += WORLD_Y_OFFSET
+  
+  pointerEventsSystem.onPointerDown(
+    {
+      entity: couch1,
+      opts: { button: InputAction.IA_POINTER, hoverText: 'Sentarse' }
+    },
+    function () {
+      const pos = Transform.get(couch1).position
+      movePlayerTo({
+        newRelativePosition: Vector3.create(pos.x, pos.y + 0.5, pos.z)
+      }).then(() => {
+        // Esperamos 500ms para asegurar que el movimiento haya finalizado y no cancele el emote
+        let timer = 0
+        const emoteSystem = (dt: number) => {
+          timer += dt
+          if (timer >= 0.5) {
+            triggerEmote({ predefinedEmote: 'sit' }).catch(() => {})
+            engine.removeSystem(emoteSystem)
+          }
+        }
+        engine.addSystem(emoteSystem)
+      }).catch(() => {})
+    }
+  )
+
+  // 1.6.3 Couch 2
+  const couch2 = engine.addEntity()
+  spawnedModelEntities.add(couch2)
+  GltfContainer.create(couch2, {
+    src: 'assets/models/couch2.glb',
+    invisibleMeshesCollisionMask: ColliderLayer.CL_PHYSICS,
+    visibleMeshesCollisionMask:   ColliderLayer.CL_PHYSICS | ColliderLayer.CL_POINTER
+  })
+  Transform.create(couch2, {
+    position: Vector3.create(-220.04, 17.13, 101.73),
+    rotation: Quaternion.create(0.0000, -0.4530, 0.0000, 0.8915),
+    scale: Vector3.create(3.946, 3.946, 3.946)
+  })
+  Transform.getMutable(couch2).position.y += WORLD_Y_OFFSET
+  
+  pointerEventsSystem.onPointerDown(
+    {
+      entity: couch2,
+      opts: { button: InputAction.IA_POINTER, hoverText: 'Sentarse' }
+    },
+    function () {
+      const pos = Transform.get(couch2).position
+      movePlayerTo({
+        newRelativePosition: Vector3.create(pos.x, pos.y + 0.5, pos.z)
+      }).then(() => {
+        let timer = 0
+        const emoteSystem = (dt: number) => {
+          timer += dt
+          if (timer >= 0.5) {
+            triggerEmote({ predefinedEmote: 'sit' }).catch(() => {})
+            engine.removeSystem(emoteSystem)
+          }
+        }
+        engine.addSystem(emoteSystem)
+      }).catch(() => {})
+    }
+  )
+
   // (de_dust2_2020 viejo deshabilitado — descomentar para volver al anterior)
   // const deDust2Entity = engine.addEntity()
   // GltfContainer.create(deDust2Entity, { src: 'assets/models/de_dust2_2020.glb',
@@ -128,9 +206,9 @@ export function main() {
     visibleMeshesCollisionMask:   ColliderLayer.CL_PHYSICS
   })
   Transform.create(screenEntity, {
-    position: Vector3.create(-262.83, 13.68, 125.50),
+    position: Vector3.create(-275.56, 13.68, 140.93),
     rotation: Quaternion.create(0.0000, -0.5451, 0.0000, 0.8384),
-    scale: Vector3.create(106.964, 106.968, 106.964)
+    scale: Vector3.create(106.967, 106.968, 106.967)
   })
   Transform.getMutable(screenEntity).position.y += WORLD_Y_OFFSET
 
@@ -610,6 +688,7 @@ export function main() {
   setupPaintball()
 
   // 8.5 Graffiti / Aerosol: pintar en cualquier superficie, sincronizado (v1 en-sesión, FIFO).
+  setupGraffitiPanels() // paredes pintables persistentes (backend PNG) — antes de setupGraffiti
   setupGraffiti()
   // 8.6 Side-game "Tag the City": NPC cerca del spawn → misión de taguear spots en el dust.
   setupGraffitiMission()

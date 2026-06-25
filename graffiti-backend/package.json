@@ -1,0 +1,16 @@
+{
+  "name": "graffiti-backend",
+  "version": "1.0.0",
+  "description": "Backend de graffiti persistente para la escena DCL (render a PNG por panel)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "^0.1.65",
+    "express": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

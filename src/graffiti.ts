@@ -21,6 +21,7 @@ import { getPlayer } from '@dcl/sdk/players'
 import { MessageBus } from '@dcl/sdk/message-bus'
 import { isHost, SYNC_IDS } from './net'
 import { GraffitiState, GRAFFITI_PALETTE, GRAFFITI_BRUSHES, GRAFFITI_SIZES } from './graffitiState'
+import { panelHitUV, paintPanel } from './graffitiPanels'
 import { RaceState } from './raceState'
 
 const graffitiBus = new MessageBus()
@@ -192,10 +193,12 @@ function updateCan() {
   if (GraffitiState.sprayMode && !RaceState.isOccupied) {
     if (!canEntity) {
       canEntity = engine.addEntity()
+      // Referencia: la pistola de paintball va en (0.3,-0.4,0.8). Corremos la lata más
+      // hacia el CENTRO y cerca de la mira, para que parezca que pintás desde el pico.
       Transform.create(canEntity, {
         parent: engine.CameraEntity,
-        position: Vector3.create(0, -0.32, 0.55), // x=0 centrado, abajo de la mira
-        rotation: Quaternion.fromEulerDegrees(-12, 0, 0),
+        position: Vector3.create(0.14, -0.28, 0.55),
+        rotation: Quaternion.fromEulerDegrees(-14, -10, 0),
         scale: Vector3.create(0.09, 0.09, 0.09)   // el GLB mide ~1.9m → lata de mano
       })
       GltfContainer.create(canEntity, { src: 'assets/models/aerosol.glb' })
@@ -263,11 +266,18 @@ function graffitiSystem(dt: number) {
       const emitDot = (px: number, py: number, pz: number) => {
         if (GraffitiState.eraser) {
           graffitiBus.emit('gErase', { x: px, y: py, z: pz, r: base })
-        } else {
-          const c = strokeColor()
-          graffitiBus.emit('gPaint', { x: px, y: py, z: pz, nx: n.x, ny: n.y, nz: n.z, r: c.r, g: c.g, b: c.b, brush: GraffitiState.selectedBrush, size: base, author })
-          for (const l of paintListeners) l(px, py, pz)
+          return
         }
+        const c = strokeColor()
+        // Si caés sobre un PANEL pintable → va al backend (persistente entre sesiones,
+        // liviano). Si no, calco en-sesión (como antes) para "pintar en cualquier lado".
+        const panel = panelHitUV(Vector3.create(px, py, pz))
+        if (panel) {
+          paintPanel(panel.id, panel.u, panel.v, c, base)
+        } else {
+          graffitiBus.emit('gPaint', { x: px, y: py, z: pz, nx: n.x, ny: n.y, nz: n.z, r: c.r, g: c.g, b: c.b, brush: GraffitiState.selectedBrush, size: base, author })
+        }
+        for (const l of paintListeners) l(px, py, pz)
       }
 
       const moved = !lastDotPos || Vector3.distance(p, lastDotPos) >= spacing
