@@ -7,14 +7,14 @@
 
 import { engine, Entity, Transform, Raycast, RaycastResult, RaycastQueryType, ColliderLayer, PlayerIdentityData, GltfContainer } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
-import { ARENA_BOUNDS, ARENA_Y_SAMPLE, DUST_FLOOR_MIN, DUST_FLOOR_MAX } from './paintballArena'
+import { ARENA_BOUNDS, ARENA_Y_SAMPLE, DUST_FLOOR_MIN, DUST_FLOOR_MAX, FFA_SPAWNS, TEAM_SPAWN_T, TEAM_SPAWN_CT } from './paintballArena'
 import { trackEntity } from './index'
 import { isChildOf } from './utils'
 
 type NavNode = { x: number; y: number; z: number; edges: number[] }
 
 const CELL = 5.0 // tamaño de celda (m)
-const STEP_MAX = 2.6 // desnivel máximo caminable entre celdas vecinas (escalones)
+const STEP_MAX = 3.0 // desnivel máximo caminable entre celdas vecinas (escalones/escaleras)
 const POOL = 20 // raycasts simultáneos para muestrear
 
 const nodes: NavNode[] = []
@@ -165,6 +165,49 @@ function edgeBlocked(e: Entity, a: number, b: number): boolean {
   return false
 }
 
+// Flood-fill estilo Counter-Strike (nav_generate de Mike Booth): parte de los SPAWNS y
+// se queda SOLO con los nodos ALCANZABLES caminando (por las aristas que ya respetan
+// paredes y escalones). Lo que no se puede pisar desde un spawn —techos sueltos, islas—
+// se descarta, así los bots nunca pathean ahí. Interiores/escaleras/balcones SÍ entran
+// porque hay una cadena de aristas caminables que llega. Reconstruye nodes + cellNodes.
+function pruneToReachable() {
+  if (nodes.length === 0) return
+  const seeds = [...FFA_SPAWNS, TEAM_SPAWN_T, TEAM_SPAWN_CT]
+  const reach = new Set<number>()
+  const stack: number[] = []
+  for (const s of seeds) {
+    const ni = nearestNode(Vector3.create(s.x, s.y, s.z))
+    if (ni >= 0 && !reach.has(ni)) { reach.add(ni); stack.push(ni) }
+  }
+  while (stack.length) {
+    const c = stack.pop()!
+    for (const nb of nodes[c].edges) if (!reach.has(nb)) { reach.add(nb); stack.push(nb) }
+  }
+
+  const oldToNew = new Map<number, number>()
+  const kept: NavNode[] = []
+  for (let i = 0; i < nodes.length; i++) {
+    if (!reach.has(i)) continue
+    oldToNew.set(i, kept.length)
+    kept.push({ x: nodes[i].x, y: nodes[i].y, z: nodes[i].z, edges: [] })
+  }
+  for (let i = 0; i < nodes.length; i++) {
+    if (!reach.has(i)) continue
+    const ni = oldToNew.get(i)!
+    for (const e of nodes[i].edges) { const ne = oldToNew.get(e); if (ne !== undefined) kept[ni].edges.push(ne) }
+  }
+  nodes.length = 0
+  for (const n of kept) nodes.push(n)
+  cellNodes.clear()
+  for (let i = 0; i < nodes.length; i++) {
+    const ix = Math.floor((nodes[i].x - ARENA_BOUNDS.minX) / CELL)
+    const iz = Math.floor((nodes[i].z - ARENA_BOUNDS.minZ) / CELL)
+    const key = ix + '_' + iz
+    const list = cellNodes.get(key) || []
+    list.push(i); cellNodes.set(key, list)
+  }
+}
+
 function navSampleSystem(_dt: number) {
   if (!started || ready) return
 
@@ -226,12 +269,14 @@ function navSampleSystem(_dt: number) {
     if (edgeQueue.length === 0 && edgeSlot.every((c) => c === null)) {
       for (const e of pool) engine.removeEntity(e)
       pool.length = 0
+      const before = nodes.length
+      pruneToReachable() // FLOOD-FILL: quedarse solo con lo alcanzable desde los spawns
       ready = nodes.length > 0
       started = ready
       navPhase = 0
       let edgeCount = 0
       for (const n of nodes) edgeCount += n.edges.length
-      console.log(`[NAV] Listo: ${nodes.length} nodos, ${edgeCount / 2} aristas (paredes respetadas). Ready=${ready}`)
+      console.log(`[NAV] Listo: ${before}→${nodes.length} nodos alcanzables, ${edgeCount / 2} aristas (paredes+escaleras). Ready=${ready}`)
     }
   }
 }

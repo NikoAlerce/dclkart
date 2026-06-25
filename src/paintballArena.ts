@@ -51,13 +51,15 @@ export const FFA_SPAWNS = [
   Vector3.create(-25.0, FALLBACK_FLOOR_Y + 1, 400.0)
 ]
 
-// ── Banda de PISO CAMINABLE del dust (coords de mundo) ──────────────────────────
-// De la inspección de la malla (tools/track_topology.py): el piso jugable del dust va
-// de ~Y81 a ~Y99; por debajo de ~73.5 está la pista de karts y por ENCIMA de ~101 hay
-// TECHOS/paredes (geometría hasta Y147). El navmesh SOLO toma nodos en [MIN, MAX] → así
-// los bots dejan de "caminar por el cielo" (pathear sobre los techos).
+// ── Banda de geometría del dust a considerar como POSIBLE piso (coords de mundo) ──
+// El dust es una ciudad multinivel (calles, casas con interiores, escaleras, balcones).
+// Por debajo de ~73.5 está la pista de karts (otra cosa); por encima de ~115 es skybox/
+// techos altos. Entre medio queda TODO lo caminable. NO filtramos por altura para decidir
+// qué es piso — eso lo decide la ALCANZABILIDAD (flood-fill desde los spawns, estilo CS):
+// es navegable solo lo que se puede pisar caminando desde un spawn. Así interiores/
+// escaleras/balcones entran y los techos sueltos quedan afuera solos.
 export const DUST_FLOOR_MIN = 73.5
-export const DUST_FLOOR_MAX = 101.0
+export const DUST_FLOOR_MAX = 115.0
 
 // ── Límites XZ del arena (para el navmesh). Ajustados al área jugable real del dust
 // (X≈-120..60, Z≈300..572 según la topología) + margen. Antes era enorme (X[-250,100]
