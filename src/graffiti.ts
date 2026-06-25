@@ -19,13 +19,12 @@ import { Vector3, Quaternion, Color4 } from '@dcl/sdk/math'
 import { syncEntity } from '@dcl/sdk/network'
 import { MessageBus } from '@dcl/sdk/message-bus'
 import { isHost, SYNC_IDS } from './net'
-import { GraffitiState, GRAFFITI_PALETTE } from './graffitiState'
+import { GraffitiState, GRAFFITI_PALETTE, GRAFFITI_BRUSHES, GRAFFITI_SIZES } from './graffitiState'
 import { RaceState } from './raceState'
 
 const graffitiBus = new MessageBus()
 
 const MAX_GRAFFITI = 100          // cupo (FIFO): al pasarse, se reusa el más viejo
-const SPRAY_TEX    = 'assets/textures/glow_soft.png'  // mancha circular suave (alpha)
 const SPRAY_RANGE  = 40           // alcance del aerosol (m)
 
 // Componente sincronizado por slot. El visual (plano) se deriva localmente de estos datos.
@@ -34,14 +33,15 @@ const GraffitiData = engine.defineComponent('graffitiData', {
   x: Schemas.Float, y: Schemas.Float, z: Schemas.Float,   // posición mundial del impacto
   nx: Schemas.Float, ny: Schemas.Float, nz: Schemas.Float, // normal de la superficie
   color: Schemas.Int,    // índice en GRAFFITI_PALETTE
-  size: Schemas.Float,
+  brush: Schemas.Int,    // índice en GRAFFITI_BRUSHES (textura: spray↔definido)
+  size: Schemas.Float,   // lado del plano (m)
   seq: Schemas.Int       // orden de creación → el FIFO reusa el de menor seq
 })
 
 type Slot = { root: Entity; visual: Entity; lastSeq: number; lastActive: boolean }
 const slots: Slot[] = []
 
-type PaintMsg = { x: number; y: number; z: number; nx: number; ny: number; nz: number; color: number; size: number }
+type PaintMsg = { x: number; y: number; z: number; nx: number; ny: number; nz: number; color: number; brush: number; size: number }
 
 let rayEntity: Entity
 let canEntity: Entity | null = null
@@ -51,7 +51,7 @@ export function setupGraffiti() {
   // ── Pool de slots sincronizados ──
   for (let i = 0; i < MAX_GRAFFITI; i++) {
     const root = engine.addEntity()
-    GraffitiData.create(root, { active: false, x: 0, y: -1000, z: 0, nx: 0, ny: 1, nz: 0, color: 0, size: 1, seq: 0 })
+    GraffitiData.create(root, { active: false, x: 0, y: -1000, z: 0, nx: 0, ny: 1, nz: 0, color: 0, brush: 1, size: 1, seq: 0 })
 
     // Visual TOP-LEVEL (no hijo): lo posicionamos en mundo desde los datos del slot.
     const visual = engine.addEntity()
@@ -95,7 +95,7 @@ function hostAddGraffiti(m: PaintMsg) {
   dd.active = true
   dd.x = m.x; dd.y = m.y; dd.z = m.z
   dd.nx = m.nx; dd.ny = m.ny; dd.nz = m.nz
-  dd.color = m.color; dd.size = m.size; dd.seq = seq
+  dd.color = m.color; dd.brush = m.brush; dd.size = m.size; dd.seq = seq
 }
 
 // Coloca/colorea el plano del slot desde sus datos sincronizados.
@@ -114,13 +114,14 @@ function applySlotVisual(s: Slot, d: ReturnType<typeof GraffitiData.get>) {
   vt.scale = Vector3.create(d.size, d.size, d.size)
 
   const c = GRAFFITI_PALETTE[d.color] || GRAFFITI_PALETTE[0]
+  const b = GRAFFITI_BRUSHES[d.brush] || GRAFFITI_BRUSHES[1]
   Material.setPbrMaterial(s.visual, {
     albedoColor: Color4.create(c.r, c.g, c.b, 1),
     emissiveColor: c,
-    emissiveIntensity: 0.45,
-    texture: Material.Texture.Common({ src: SPRAY_TEX }),
-    alphaTexture: Material.Texture.Common({ src: SPRAY_TEX }),
-    transparencyMode: 2, // alpha blend → bordes suaves de la mancha
+    emissiveIntensity: b.glow,
+    texture: Material.Texture.Common({ src: b.tex }),
+    alphaTexture: Material.Texture.Common({ src: b.tex }),
+    transparencyMode: 2, // alpha blend → la textura del pincel define spray↔definido
     roughness: 1, metallic: 0
   })
 }
@@ -188,7 +189,9 @@ function graffitiSystem(_dt: number) {
           graffitiBus.emit('gPaint', {
             x: hit.position.x, y: hit.position.y, z: hit.position.z,
             nx: hit.normalHit.x, ny: hit.normalHit.y, nz: hit.normalHit.z,
-            color: GraffitiState.selectedColor, size: GraffitiState.brushSize
+            color: GraffitiState.selectedColor,
+            brush: GraffitiState.selectedBrush,
+            size: GRAFFITI_SIZES[GraffitiState.selectedSize] || 1.0
           })
         }
       }

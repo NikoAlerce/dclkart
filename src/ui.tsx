@@ -4,7 +4,7 @@ import { engine, Transform, PlayerIdentityData } from '@dcl/sdk/ecs'
 import { getPlayer } from '@dcl/sdk/players'
 import { RaceState } from './raceState'
 import { PaintballState, KILLS_TO_WIN } from './paintballState'
-import { GraffitiState, GRAFFITI_PALETTE } from './graffitiState'
+import { GraffitiState, GRAFFITI_PALETTE, GRAFFITI_BRUSHES, GRAFFITI_SIZE_LABELS } from './graffitiState'
 import { getBotsForRadar } from './paintballBots'
 import { startPaintball, joinPaintball, exitPaintball } from './paintball'
 import { getMyAddr } from './net'
@@ -318,6 +318,36 @@ const uiComponent = () => {
               <UiEntity uiTransform={{ width: 6, height: 6 }} uiBackground={{ color: Color4.create(1, 1, 1, 0.95) }} />
             </UiEntity>
           )}
+          {/* Pinceles (spray↔definido) + tamaño — arriba de la paleta */}
+          {GraffitiState.sprayMode && (
+            <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 122, left: '50%' }, margin: { left: -180 }, width: 360, height: 36, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 3 }}
+              uiBackground={{ color: Color4.create(0.04, 0.04, 0.07, 0.82) }}>
+              {GRAFFITI_BRUSHES.map((b, i) => {
+                const sel = GraffitiState.selectedBrush === i
+                return (
+                  <UiEntity key={`br${i}`}
+                    uiTransform={{ width: 62, height: 28, margin: { left: 2, right: 2 }, justifyContent: 'center', alignItems: 'center' }}
+                    uiBackground={{ color: sel ? Color4.create(0.25, 0.65, 0.4, 0.95) : Color4.create(0.12, 0.12, 0.16, 0.9) }}
+                    onMouseDown={() => { GraffitiState.selectedBrush = i; GraffitiState.lastUiClickTime = Date.now() }}>
+                    <Label value={b.name} fontSize={10} color={Color4.White()} />
+                  </UiEntity>
+                )
+              })}
+              <UiEntity uiTransform={{ width: 10, height: 28 }} />
+              {GRAFFITI_SIZE_LABELS.map((lbl, i) => {
+                const sel = GraffitiState.selectedSize === i
+                return (
+                  <UiEntity key={`sz${i}`}
+                    uiTransform={{ width: 30, height: 28, margin: { left: 2, right: 2 }, justifyContent: 'center', alignItems: 'center' }}
+                    uiBackground={{ color: sel ? Color4.create(0.25, 0.55, 0.85, 0.95) : Color4.create(0.12, 0.12, 0.16, 0.9) }}
+                    onMouseDown={() => { GraffitiState.selectedSize = i; GraffitiState.lastUiClickTime = Date.now() }}>
+                    <Label value={lbl} fontSize={11} color={Color4.White()} />
+                  </UiEntity>
+                )
+              })}
+            </UiEntity>
+          )}
+
           {/* Paleta de colores (solo en modo aerosol) */}
           {GraffitiState.sprayMode && (
             <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 72, left: '50%' }, margin: { left: -(GRAFFITI_PALETTE.length * 32) / 2 }, width: GRAFFITI_PALETTE.length * 32, height: 42, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 4 }}
