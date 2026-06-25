@@ -318,6 +318,12 @@ const uiComponent = () => {
               <UiEntity uiTransform={{ width: 6, height: 6 }} uiBackground={{ color: GraffitiState.eraser ? Color4.create(1, 0.2, 0.2, 0.95) : Color4.create(1, 1, 1, 0.95) }} />
             </UiEntity>
           )}
+          {/* 🖊 Firma del autor del graffiti que estás mirando */}
+          {GraffitiState.sprayMode && GraffitiState.hoveredAuthor !== '' && (
+            <UiEntity uiTransform={{ positionType: 'absolute', position: { top: '50%', left: '50%' }, margin: { left: -100, top: 16 }, width: 200, height: 22, justifyContent: 'center', alignItems: 'center' }}>
+              <Label value={`🖊 by ${GraffitiState.hoveredAuthor}`} fontSize={12} color={Color4.create(0.9, 0.95, 1, 1)} />
+            </UiEntity>
+          )}
           {/* Modos: Rainbow + Borrador (arriba de los pinceles) */}
           {GraffitiState.sprayMode && (
             <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 162, left: '50%' }, margin: { left: -110 }, width: 220, height: 32, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 3 }}

@@ -11,6 +11,7 @@ export const GraffitiState = {
   selectedSize: 1,      // índice en GRAFFITI_SIZES (default: M)
   rainbow: false,       // 🌈 el color cicla solo mientras trazás → degradé arcoíris
   eraser: false,        // 🧽 modo borrador: pintar borra en vez de pintar
+  hoveredAuthor: '',    // 🖊 autor del graffiti que estás mirando (firma)
   lastUiClickTime: 0    // anti-rebote: clickear la UI (paleta/botón) no debe pintar
 }
 

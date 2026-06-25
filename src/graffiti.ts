@@ -17,6 +17,7 @@ import {
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion, Color3, Color4 } from '@dcl/sdk/math'
 import { syncEntity } from '@dcl/sdk/network'
+import { getPlayer } from '@dcl/sdk/players'
 import { MessageBus } from '@dcl/sdk/message-bus'
 import { isHost, SYNC_IDS } from './net'
 import { GraffitiState, GRAFFITI_PALETTE, GRAFFITI_BRUSHES, GRAFFITI_SIZES } from './graffitiState'
@@ -35,13 +36,14 @@ const GraffitiData = engine.defineComponent('graffitiData', {
   cr: Schemas.Float, cg: Schemas.Float, cb: Schemas.Float, // color RGB (soporta rainbow/custom)
   brush: Schemas.Int,    // índice en GRAFFITI_BRUSHES (textura: spray↔definido↔neón)
   size: Schemas.Float,   // lado del plano (m)
+  author: Schemas.String, // 🖊 quién lo pintó (firma)
   seq: Schemas.Int       // orden de creación → el FIFO reusa el de menor seq
 })
 
 type Slot = { root: Entity; visual: Entity; lastSeq: number; lastActive: boolean }
 const slots: Slot[] = []
 
-type PaintMsg = { x: number; y: number; z: number; nx: number; ny: number; nz: number; r: number; g: number; b: number; brush: number; size: number }
+type PaintMsg = { x: number; y: number; z: number; nx: number; ny: number; nz: number; r: number; g: number; b: number; brush: number; size: number; author: string; grow?: boolean }
 type EraseMsg = { x: number; y: number; z: number; r: number }
 
 let rayEntity: Entity
@@ -49,6 +51,8 @@ let canEntity: Entity | null = null
 let lastCanColor = -1
 let lastDotPos: Vector3 | null = null   // último punto pintado (espaciado del trazo)
 let rainbowHue = 0
+let stillTime = 0    // tiempo quieto en el mismo punto → saturación (la mancha crece)
+let growAccum = 0    // acumulador para mandar el "crecer" cada ~0.1s
 
 // HSV→RGB para el modo arcoíris.
 function hsvToRgb(h: number, s: number, v: number): { r: number; g: number; b: number } {
@@ -78,7 +82,7 @@ export function setupGraffiti() {
   // ── Pool de slots sincronizados ──
   for (let i = 0; i < MAX_GRAFFITI; i++) {
     const root = engine.addEntity()
-    GraffitiData.create(root, { active: false, x: 0, y: -1000, z: 0, nx: 0, ny: 1, nz: 0, cr: 1, cg: 1, cb: 1, brush: 1, size: 1, seq: 0 })
+    GraffitiData.create(root, { active: false, x: 0, y: -1000, z: 0, nx: 0, ny: 1, nz: 0, cr: 1, cg: 1, cb: 1, brush: 1, size: 1, author: '', seq: 0 })
 
     // Visual TOP-LEVEL (no hijo): lo posicionamos en mundo desde los datos del slot.
     const visual = engine.addEntity()
@@ -112,9 +116,24 @@ export function setupGraffiti() {
   engine.addSystem(graffitiSystem)
 }
 
+let hostLastSlot: Slot | null = null
+
 // El host elige el slot: primero uno libre; si están todos usados, el de MENOR seq
 // (el más viejo) → FIFO. seq derivado del máximo presente → robusto a cambio de host.
 function hostAddGraffiti(m: PaintMsg) {
+  // SATURACIÓN: si es un punto de "crecer" sobre el último (mantener apretado en el
+  // mismo lugar), agrandamos ESE slot en vez de gastar uno nuevo → la mancha crece.
+  if (m.grow && hostLastSlot) {
+    const ld = GraffitiData.getOrNull(hostLastSlot.root)
+    if (ld && ld.active) {
+      const dx = ld.x - m.x, dy = ld.y - m.y, dz = ld.z - m.z
+      if (dx * dx + dy * dy + dz * dz < 9) { // sanity ~3m
+        GraffitiData.getMutable(hostLastSlot.root).size = m.size
+        return
+      }
+    }
+  }
+
   let maxSeq = 0
   for (const s of slots) { const d = GraffitiData.get(s.root); if (d.seq > maxSeq) maxSeq = d.seq }
   const seq = maxSeq + 1
@@ -132,7 +151,8 @@ function hostAddGraffiti(m: PaintMsg) {
   dd.active = true
   dd.x = m.x; dd.y = m.y; dd.z = m.z
   dd.nx = m.nx; dd.ny = m.ny; dd.nz = m.nz
-  dd.cr = m.r; dd.cg = m.g; dd.cb = m.b; dd.brush = m.brush; dd.size = m.size; dd.seq = seq
+  dd.cr = m.r; dd.cg = m.g; dd.cb = m.b; dd.brush = m.brush; dd.size = m.size; dd.author = m.author; dd.seq = seq
+  hostLastSlot = target
 }
 
 // Coloca/colorea el plano del slot desde sus datos sincronizados.
@@ -187,7 +207,7 @@ function updateCan() {
   }
 }
 
-function graffitiSystem(_dt: number) {
+function graffitiSystem(dt: number) {
   // 1) Render: actualizar los slots que cambiaron (no por frame).
   for (const s of slots) {
     const d = GraffitiData.getOrNull(s.root)
@@ -212,40 +232,69 @@ function graffitiSystem(_dt: number) {
         collisionMask: ColliderLayer.CL_PHYSICS
       })
     }
+    const rr = RaycastResult.getOrNull(rayEntity)
+    const hit = rr && rr.hits.length > 0
+      ? rr.hits.find(h => h.position && h.normalHit && h.entityId !== engine.PlayerEntity && !PlayerIdentityData.has(h.entityId as any))
+      : undefined
+
+    // 🖊 FIRMA: mostrar quién pintó el graffiti más cercano a donde estás mirando.
+    GraffitiState.hoveredAuthor = ''
+    if (hit && hit.position) {
+      let best = 1.4 * 1.4, found = ''
+      for (const s of slots) {
+        const d = GraffitiData.getOrNull(s.root)
+        if (!d || !d.active || !d.author) continue
+        const dx = d.x - hit.position.x, dy = d.y - hit.position.y, dz = d.z - hit.position.z
+        const dd = dx * dx + dy * dy + dz * dz
+        if (dd < best) { best = dd; found = d.author }
+      }
+      GraffitiState.hoveredAuthor = found
+    }
+
     // MANTENER APRETADO = trazo continuo. El anti-rebote evita pintar al tocar la UI.
     const uiClick = Date.now() - GraffitiState.lastUiClickTime < 300
     const holding = !uiClick && inputSystem.isPressed(InputAction.IA_POINTER)
-    if (holding) {
-      const rr = RaycastResult.getOrNull(rayEntity)
-      const hit = rr && rr.hits.length > 0
-        ? rr.hits.find(h => h.position && h.normalHit && h.entityId !== engine.PlayerEntity && !PlayerIdentityData.has(h.entityId as any))
-        : undefined
-      if (hit && hit.position && hit.normalHit) {
-        const p = Vector3.create(hit.position.x, hit.position.y, hit.position.z)
-        const size = GRAFFITI_SIZES[GraffitiState.selectedSize] || 1.0
-        const spacing = size * 0.3
-        // Solo un punto nuevo cuando el cursor se movió 'spacing' → línea fluida sin inundar.
-        if (!lastDotPos || Vector3.distance(p, lastDotPos) >= spacing) {
-          lastDotPos = p
-          if (GraffitiState.eraser) {
-            graffitiBus.emit('gErase', { x: p.x, y: p.y, z: p.z, r: size })
-          } else {
-            const c = strokeColor()
-            graffitiBus.emit('gPaint', {
-              x: hit.position.x, y: hit.position.y, z: hit.position.z,
-              nx: hit.normalHit.x, ny: hit.normalHit.y, nz: hit.normalHit.z,
-              r: c.r, g: c.g, b: c.b,
-              brush: GraffitiState.selectedBrush,
-              size
-            })
-          }
+    if (holding && hit && hit.position && hit.normalHit) {
+      const p = Vector3.create(hit.position.x, hit.position.y, hit.position.z)
+      const base = GRAFFITI_SIZES[GraffitiState.selectedSize] || 1.0
+      const spacing = base * 0.35
+      const author = getPlayer()?.name || 'anon'
+      const moved = !lastDotPos || Vector3.distance(p, lastDotPos) >= spacing
+
+      if (moved) {
+        // Punto nuevo (trazo): el cursor se movió → línea fluida sin inundar.
+        lastDotPos = p; stillTime = 0; growAccum = 0
+        if (GraffitiState.eraser) {
+          graffitiBus.emit('gErase', { x: p.x, y: p.y, z: p.z, r: base })
+        } else {
+          const c = strokeColor()
+          graffitiBus.emit('gPaint', {
+            x: hit.position.x, y: hit.position.y, z: hit.position.z,
+            nx: hit.normalHit.x, ny: hit.normalHit.y, nz: hit.normalHit.z,
+            r: c.r, g: c.g, b: c.b, brush: GraffitiState.selectedBrush, size: base, author
+          })
+        }
+      } else if (!GraffitiState.eraser) {
+        // SATURACIÓN: quieto en el mismo lugar → la mancha CRECE (como un aerosol real).
+        stillTime += dt; growAccum += dt
+        if (growAccum > 0.1) {
+          growAccum = 0
+          const grown = base * Math.min(2.5, 1 + stillTime * 0.7)
+          graffitiBus.emit('gPaint', {
+            x: hit.position.x, y: hit.position.y, z: hit.position.z,
+            nx: hit.normalHit.x, ny: hit.normalHit.y, nz: hit.normalHit.z,
+            r: 1, g: 1, b: 1, brush: GraffitiState.selectedBrush, size: grown, author, grow: true
+          })
         }
       }
     } else {
-      lastDotPos = null   // soltó → reiniciar el espaciado para el próximo trazo
+      lastDotPos = null; stillTime = 0; growAccum = 0
     }
-  } else if (Raycast.has(rayEntity)) {
-    Raycast.deleteFrom(rayEntity)
-    RaycastResult.deleteFrom(rayEntity)
+  } else {
+    GraffitiState.hoveredAuthor = ''
+    if (Raycast.has(rayEntity)) {
+      Raycast.deleteFrom(rayEntity)
+      RaycastResult.deleteFrom(rayEntity)
+    }
   }
 }
