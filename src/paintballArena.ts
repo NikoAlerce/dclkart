@@ -51,9 +51,18 @@ export const FFA_SPAWNS = [
   Vector3.create(-25.0, FALLBACK_FLOOR_Y + 1, 400.0)
 ]
 
-// ── Límites XZ del arena (para el navmesh).
-// Expandido enormemente para cubrir todo el track y que los bots no reboten en los bordes.
-export const ARENA_BOUNDS = { minX: -250, maxX: 100, minZ: 200, maxZ: 600 }
+// ── Banda de PISO CAMINABLE del dust (coords de mundo) ──────────────────────────
+// De la inspección de la malla (tools/track_topology.py): el piso jugable del dust va
+// de ~Y81 a ~Y99; por debajo de ~73.5 está la pista de karts y por ENCIMA de ~101 hay
+// TECHOS/paredes (geometría hasta Y147). El navmesh SOLO toma nodos en [MIN, MAX] → así
+// los bots dejan de "caminar por el cielo" (pathear sobre los techos).
+export const DUST_FLOOR_MIN = 73.5
+export const DUST_FLOOR_MAX = 101.0
+
+// ── Límites XZ del arena (para el navmesh). Ajustados al área jugable real del dust
+// (X≈-120..60, Z≈300..572 según la topología) + margen. Antes era enorme (X[-250,100]
+// Z[200,600]) y muestreaba geometría no-dust → nodos espurios/altos.
+export const ARENA_BOUNDS = { minX: -140, maxX: 75, minZ: 265, maxZ: 585 }
 
 // ── Rango vertical a muestrear (multinivel: pisos/escaleras/puentes).
 // Los spawns van de Y=56.72 a Y=84.91 (raw, antes del offset). Con offset → 106..134.

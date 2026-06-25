@@ -9,7 +9,7 @@ import { PaintColor, nextBotPaint } from './paintballColors'
 import { isHost, getMyAddr, SYNC_IDS } from './net'
 import { getPlayer } from '@dcl/sdk/players'
 import { pbBus, PB_MSG, BotDamageMsg, BotKilledMsg, BotShotMsg } from './paintballNet'
-import { FFA_SPAWNS, TEAM_SPAWN_T, TEAM_SPAWN_CT, TEAM_COLOR_T, TEAM_COLOR_CT, ARENA_FLOOR_Y, ArenaCalibration } from './paintballArena'
+import { FFA_SPAWNS, TEAM_SPAWN_T, TEAM_SPAWN_CT, TEAM_COLOR_T, TEAM_COLOR_CT, ARENA_FLOOR_Y, ArenaCalibration, DUST_FLOOR_MIN, DUST_FLOOR_MAX } from './paintballArena'
 import { isNavReady, findPath, groundYAt } from './paintballNav'
 import { playShootAt } from './paintballAudio'
 import { trackEntity } from './index'
@@ -637,6 +637,11 @@ function botSystem(dt: number) {
       }
     }
 
+    // Descartar hits por ENCIMA del techo del dust (≈101): son paredes/techos, no piso.
+    // Sin esto, si el raycast pega en algo alto, el bot "subía al cielo". Lo tratamos como
+    // sin-hit → cae al navmesh (capado a la misma banda) que lo trae al piso real.
+    if (groundY !== null && groundY > DUST_FLOOR_MAX) groundY = null
+
     // 2. Si el raycast no encontró nada (ej: recién teletransportado o vacío temporal), usar el navmesh como fallback
     if (groundY === null && isNavReady()) {
       groundY = groundYAt(botPos.x, botPos.z, botPos.y)
@@ -653,14 +658,14 @@ function botSystem(dt: number) {
     })
 
     if (groundY !== null) {
-      if (groundY < 73.5) groundY = 73.5
+      if (groundY < DUST_FLOOR_MIN) groundY = DUST_FLOOR_MIN
       const diff = groundY - botPos.y
       if (Math.abs(diff) > 12) botPos.y = groundY         // recién spawneó muy lejos
       else botPos.y += diff * Math.min(1, dt * 10)        // sigue el terreno, suave
     }
-    if (botPos.y < 73.5) {
-      botPos.y = 73.5
-    }
+    if (botPos.y < DUST_FLOOR_MIN) botPos.y = DUST_FLOOR_MIN
+    // Tope duro: nunca por encima del techo del dust (anti "caminar por el cielo").
+    if (botPos.y > DUST_FLOOR_MAX + 1.5) botPos.y = DUST_FLOOR_MAX + 1.5
     // Sin hit (raro): mantenemos Y (no cae al vacío).
 
     BotDebugInfo[getBotIndex(bot.entity)] = { y: botPos.y, groundY, hits: [] }
