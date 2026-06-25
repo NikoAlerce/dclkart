@@ -11,7 +11,7 @@
 // (Persistencia entre sesiones = backend, pendiente para v2.)
 
 import {
-  engine, Transform, MeshRenderer, Material, Schemas, Entity,
+  engine, Transform, MeshRenderer, Material, GltfContainer, Schemas, Entity,
   InputAction, inputSystem,
   Raycast, RaycastResult, RaycastQueryType, ColliderLayer, PlayerIdentityData
 } from '@dcl/sdk/ecs'
@@ -53,6 +53,7 @@ type EraseMsg = { x: number; y: number; z: number; r: number }
 
 let rayEntity: Entity
 let canEntity: Entity | null = null
+let canCap: Entity | null = null
 let lastCanColor = -1
 let lastDotPos: Vector3 | null = null   // último punto pintado (espaciado del trazo)
 let rainbowHue = 0
@@ -188,27 +189,34 @@ function applySlotVisual(s: Slot, d: ReturnType<typeof GraffitiData.get>) {
   })
 }
 
-// Aerosol en mano (cilindro procedural teñido del color elegido) — feedback visual.
+// Aerosol en mano: modelo GLB + una tapa/orbe teñido del color elegido (feedback).
 function updateCan() {
   if (GraffitiState.sprayMode && !RaceState.isOccupied) {
     if (!canEntity) {
       canEntity = engine.addEntity()
       Transform.create(canEntity, {
         parent: engine.CameraEntity,
-        position: Vector3.create(0.35, -0.32, 0.7),
-        rotation: Quaternion.fromEulerDegrees(8, 0, 0),
-        scale: Vector3.create(0.07, 0.22, 0.07)
+        position: Vector3.create(0.34, -0.38, 0.62),
+        rotation: Quaternion.fromEulerDegrees(8, -8, 6),
+        scale: Vector3.One()
       })
-      MeshRenderer.setCylinder(canEntity)
+      // El GLB (mide ~1.9m → escalar a tamaño de lata de mano).
+      const model = engine.addEntity()
+      Transform.create(model, { parent: canEntity, position: Vector3.Zero(), scale: Vector3.create(0.12, 0.12, 0.12) })
+      GltfContainer.create(model, { src: 'assets/models/aerosol.glb' })
+      // Orbe sobre la lata teñido del color elegido (el GLB no se puede teñir).
+      canCap = engine.addEntity()
+      Transform.create(canCap, { parent: canEntity, position: Vector3.create(0, 0.135, 0), scale: Vector3.create(0.045, 0.045, 0.045) })
+      MeshRenderer.setSphere(canCap)
       lastCanColor = -1
     }
-    if (lastCanColor !== GraffitiState.selectedColor) {
+    if (lastCanColor !== GraffitiState.selectedColor && canCap) {
       lastCanColor = GraffitiState.selectedColor
       const c = GRAFFITI_PALETTE[GraffitiState.selectedColor] || GRAFFITI_PALETTE[0]
-      Material.setPbrMaterial(canEntity, { albedoColor: Color4.create(c.r, c.g, c.b, 1), emissiveColor: c, emissiveIntensity: 0.3, roughness: 0.6, metallic: 0.2 })
+      Material.setPbrMaterial(canCap, { albedoColor: Color4.create(c.r, c.g, c.b, 1), emissiveColor: c, emissiveIntensity: 1.6, roughness: 1, metallic: 0 })
     }
   } else if (canEntity) {
-    engine.removeEntity(canEntity); canEntity = null
+    engine.removeEntityWithChildren(canEntity); canEntity = null
   }
 }
 

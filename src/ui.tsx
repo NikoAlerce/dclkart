@@ -387,11 +387,11 @@ const uiComponent = () => {
               })}
             </UiEntity>
           )}
-          {/* Botón equipar/quitar aerosol */}
-          <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 24, left: '50%' }, margin: { left: -90 }, width: 180, height: 40, justifyContent: 'center', alignItems: 'center' }}
-            uiBackground={{ color: GraffitiState.sprayMode ? Color4.create(0.2, 0.7, 0.4, 0.95) : Color4.create(0.1, 0.1, 0.15, 0.85) }}
+          {/* Botón equipar/quitar aerosol — debajo del botón de la PLAYLIST (top-right) */}
+          <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 204, right: 20 }, width: 220, height: 44, justifyContent: 'center', alignItems: 'center' }}
+            uiBackground={{ color: GraffitiState.sprayMode ? Color4.create(0.2, 0.7, 0.4, 0.95) : Color4.create(0.15, 0.17, 0.26, 0.96) }}
             onMouseDown={() => { GraffitiState.sprayMode = !GraffitiState.sprayMode; GraffitiState.lastUiClickTime = Date.now() }}>
-            <Label value={GraffitiState.sprayMode ? '🎨 AEROSOL — clic para pintar' : '🎨 Aerosol'} fontSize={11} color={Color4.White()} />
+            <Label value={GraffitiState.sprayMode ? '🎨 AEROSOL ▼' : '🎨 Aerosol ►'} fontSize={16} color={Color4.create(1, 0.7, 0.95, 1)} />
           </UiEntity>
         </UiEntity>
       )}
