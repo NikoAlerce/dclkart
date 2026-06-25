@@ -9,15 +9,18 @@ export const GraffitiState = {
   selectedColor: 0,     // índice en GRAFFITI_PALETTE
   selectedBrush: 1,     // índice en GRAFFITI_BRUSHES (default: Suave)
   selectedSize: 1,      // índice en GRAFFITI_SIZES (default: M)
+  rainbow: false,       // 🌈 el color cicla solo mientras trazás → degradé arcoíris
+  eraser: false,        // 🧽 modo borrador: pintar borra en vez de pintar
   lastUiClickTime: 0    // anti-rebote: clickear la UI (paleta/botón) no debe pintar
 }
 
-// Pinceles: de más DIFUSO (spray) a más DEFINIDO (bordes marcados). Cada uno usa una
-// textura distinta de mancha. `glow` = cuánto brilla (el spray difuso glow un poco más).
+// Pinceles: de más DIFUSO (spray) a más DEFINIDO (bordes marcados) + Neón (brilla fuerte).
+// Cada uno usa una textura de mancha. `glow` = emisividad (cuánto brilla).
 export const GRAFFITI_BRUSHES: { name: string; tex: string; glow: number }[] = [
   { name: 'Spray',    tex: 'assets/textures/glow_mist.png',  glow: 0.55 }, // muy difuso
   { name: 'Suave',    tex: 'assets/textures/glow_soft.png',  glow: 0.40 }, // medio
-  { name: 'Definido', tex: 'assets/textures/glow_sharp.png', glow: 0.25 }  // bordes marcados
+  { name: 'Definido', tex: 'assets/textures/glow_sharp.png', glow: 0.25 }, // bordes marcados
+  { name: 'Neón',     tex: 'assets/textures/glow_soft.png',  glow: 3.0 }   // brilla en la oscuridad
 ]
 
 // Tamaños del trazo (metros, lado del plano).

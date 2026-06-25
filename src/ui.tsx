@@ -315,18 +315,35 @@ const uiComponent = () => {
           {GraffitiState.sprayMode && (
             <UiEntity uiTransform={{ positionType: 'absolute', position: { top: '50%', left: '50%' }, width: 12, height: 12, margin: { left: -6, top: -6 }, justifyContent: 'center', alignItems: 'center' }}
               uiBackground={{ color: Color4.create(0, 0, 0, 0.6) }}>
-              <UiEntity uiTransform={{ width: 6, height: 6 }} uiBackground={{ color: Color4.create(1, 1, 1, 0.95) }} />
+              <UiEntity uiTransform={{ width: 6, height: 6 }} uiBackground={{ color: GraffitiState.eraser ? Color4.create(1, 0.2, 0.2, 0.95) : Color4.create(1, 1, 1, 0.95) }} />
             </UiEntity>
           )}
-          {/* Pinceles (spray↔definido) + tamaño — arriba de la paleta */}
+          {/* Modos: Rainbow + Borrador (arriba de los pinceles) */}
           {GraffitiState.sprayMode && (
-            <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 122, left: '50%' }, margin: { left: -180 }, width: 360, height: 36, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 3 }}
+            <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 162, left: '50%' }, margin: { left: -110 }, width: 220, height: 32, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 3 }}
+              uiBackground={{ color: Color4.create(0.04, 0.04, 0.07, 0.82) }}>
+              <UiEntity uiTransform={{ width: 100, height: 26, margin: { left: 3, right: 3 }, justifyContent: 'center', alignItems: 'center' }}
+                uiBackground={{ color: GraffitiState.rainbow ? Color4.create(0.6, 0.3, 0.8, 0.95) : Color4.create(0.12, 0.12, 0.16, 0.9) }}
+                onMouseDown={() => { GraffitiState.rainbow = !GraffitiState.rainbow; GraffitiState.lastUiClickTime = Date.now() }}>
+                <Label value="🌈 Rainbow" fontSize={10} color={Color4.White()} />
+              </UiEntity>
+              <UiEntity uiTransform={{ width: 100, height: 26, margin: { left: 3, right: 3 }, justifyContent: 'center', alignItems: 'center' }}
+                uiBackground={{ color: GraffitiState.eraser ? Color4.create(0.8, 0.3, 0.3, 0.95) : Color4.create(0.12, 0.12, 0.16, 0.9) }}
+                onMouseDown={() => { GraffitiState.eraser = !GraffitiState.eraser; GraffitiState.lastUiClickTime = Date.now() }}>
+                <Label value="🧽 Borrar" fontSize={10} color={Color4.White()} />
+              </UiEntity>
+            </UiEntity>
+          )}
+
+          {/* Pinceles (spray↔definido↔neón) + tamaño — arriba de la paleta */}
+          {GraffitiState.sprayMode && (
+            <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 122, left: '50%' }, margin: { left: -200 }, width: 400, height: 36, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 3 }}
               uiBackground={{ color: Color4.create(0.04, 0.04, 0.07, 0.82) }}>
               {GRAFFITI_BRUSHES.map((b, i) => {
                 const sel = GraffitiState.selectedBrush === i
                 return (
                   <UiEntity key={`br${i}`}
-                    uiTransform={{ width: 62, height: 28, margin: { left: 2, right: 2 }, justifyContent: 'center', alignItems: 'center' }}
+                    uiTransform={{ width: 56, height: 28, margin: { left: 2, right: 2 }, justifyContent: 'center', alignItems: 'center' }}
                     uiBackground={{ color: sel ? Color4.create(0.25, 0.65, 0.4, 0.95) : Color4.create(0.12, 0.12, 0.16, 0.9) }}
                     onMouseDown={() => { GraffitiState.selectedBrush = i; GraffitiState.lastUiClickTime = Date.now() }}>
                     <Label value={b.name} fontSize={10} color={Color4.White()} />
