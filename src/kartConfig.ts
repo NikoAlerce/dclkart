@@ -96,10 +96,10 @@ function kartPos(row: number, col: number): Vector3 {
 export const KART_CONFIGS: KartConfig[] = [
   { id: 1,  modelPath: 'assets/models/kart.glb',  spawnPos: Vector3.create(-201.8, 64.7, 109.6),  spawnRotY: 20.9, scale: 2.54},
   { id: 2,  modelPath: 'assets/models/kart2.glb', spawnPos: Vector3.create(-205.0, 65.3, 98.0),  spawnRotY: 14.4, scale: 5.10},
-  { id: 3,  modelPath: 'assets/models/kart3.glb', spawnPos: Vector3.create(-201.0, 71.6, 28.1),  spawnRotY: 282.1, scale: 13.58, groundOffsetY: 0.34,
+  { id: 3,  modelPath: 'assets/models/kart3.glb', spawnPos: Vector3.create(-184.5, 66.6, 142.8),  spawnRotY: 23.4, scale: 7.95, groundOffsetY: 0.34,
     vehicleType: 'ship',
     maxSpeed: 48, acceleration: 28, friction: 0.55, turnSpeed: 95 },
-  { id: 4,  modelPath: 'assets/models/kart4.glb', spawnPos: Vector3.create(-243.2, 70.1, 32.7),  spawnRotY: 293.0, scale: 22.61, groundOffsetY: 0.22,
+  { id: 4,  modelPath: 'assets/models/kart4.glb', spawnPos: Vector3.create(-189.7, 65.2, 131.1),  spawnRotY: 24.1, scale: 6.98, groundOffsetY: 0.22,
     vehicleType: 'ship',
     maxSpeed: 48, acceleration: 28, friction: 0.55, turnSpeed: 95 },
   { id: 5,  modelPath: 'assets/models/kart5.glb', spawnPos: Vector3.create(-203.1, 64.5, 106.7),  spawnRotY: 14.2, scale: 2.59},

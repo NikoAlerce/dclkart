@@ -11,6 +11,7 @@ import { RaceState } from './raceState'
 import { GraffitiState } from './graffitiState'
 import { isHost, SYNC_IDS } from './net'
 import { WORLD_Y_OFFSET } from './spawnConfig'
+import { ARENA_BOUNDS } from './paintballArena'
 
 // ─── Monstruo biomecánico gigante (montable) ──────────────────────────────────
 // Camina a destinos aleatorios por el terreno y se lo puede MONTAR. El lomo es una
@@ -64,6 +65,14 @@ const MIN_GROUND_Y = WORLD_Y_OFFSET + 8   // ≈ 58 (la isla/track ronda Y 60+)
 // Encerrado en las PARCELAS (scene-local X[-768,160] Z[-288,784]) ∩ terreno del track,
 // con margen para el cuerpo gigante (~±20m) → no se sale del mundo.
 const ROAM = { minX: -530, maxX: 135, minZ: -200, maxZ: 600 }
+
+// ── Caminar SOBRE la paintball arena (dust), no atravesarla ──
+// El monstruo es un kaiju de ~116m. Si camina por DENTRO de la ciudad multinivel del dust,
+// su cuerpo gigante cruza las paredes ("la atraviesa"). En vez de eso, cuando está dentro de
+// los límites de la arena le levantamos el "piso" hasta la altura de los TECHOS, con una rampa
+// suave al entrar → camina POR ARRIBA, como Godzilla pisando la ciudad. (DUST_FLOOR_MAX≈115).
+const ARENA_WALK_Y = 122   // altura de techos del dust + margen (pies del monstruo van acá dentro de la arena)
+const ARENA_RAMP   = 45    // metros de subida gradual desde el borde (evita un escalón brusco)
 // Posición inicial ALEATORIA: arranca en un punto al azar del terreno (distinto cada sesión).
 // El host es quien manda; su posición/recorrido se propaga por el Tween sincronizado → todos
 // los jugadores lo ven en el mismo lugar. (El raycast de spawn ignora su plataforma, así que
@@ -264,6 +273,13 @@ export function setupMonster(arbolesEntity?: Entity, screenVideo?: Entity) {
     if (hosting) {
       const cur = t.position  // posición REAL actual (la mueve el tween) → re-emitir sin saltos
 
+      // ¿Está sobre la paintball arena? Profundidad dentro de los bordes (>0 = adentro).
+      const arenaEdge = Math.min(
+        cur.x - ARENA_BOUNDS.minX, ARENA_BOUNDS.maxX - cur.x,
+        cur.z - ARENA_BOUNDS.minZ, ARENA_BOUNDS.maxZ - cur.z
+      )
+      const overArena = arenaEdge > 0
+
       // Sensores sobre la posición real.
       const ft = Transform.getMutableOrNull(floor)
       if (ft) { ft.position.x = cur.x; ft.position.z = cur.z; ft.position.y = cur.y + 80 }
@@ -276,6 +292,7 @@ export function setupMonster(arbolesEntity?: Entity, screenVideo?: Entity) {
       // Leer piso (ignorando árboles, el propio monstruo y los jugadores) → el monstruo
       // COPIA las irregularidades del terreno (cada tramo apoya en el suelo real bajo él).
       const fr = RaycastResult.getOrNull(floor)
+      let floorTarget = groundY
       if (fr && fr.hits.length > 0) {
         let best: number | null = null
         for (const h of fr.hits) {
@@ -289,15 +306,20 @@ export function setupMonster(arbolesEntity?: Entity, screenVideo?: Entity) {
             if (best === null || h.position.y > best) best = h.position.y
           }
         }
-        if (best !== null) {
-          // Suavizar el cambio de nivel (evita el tartamudeo al pasar entre pisos de la arena):
-          // sube RÁPIDO (no se hunde al pisar algo más alto), baja DESPACIO (no cae de golpe).
-          const k = best > groundY ? Math.min(1, dt * 8) : Math.min(1, dt * 3)
-          groundY += (best - groundY) * k
-        } else {
-          groundY = Math.max(groundY, MIN_GROUND_Y)
-        }
+        floorTarget = best !== null ? best : Math.max(groundY, MIN_GROUND_Y)
       }
+
+      // Sobre la arena: levantar el piso hasta los techos para CAMINAR POR ARRIBA. Rampa suave
+      // según qué tan adentro está (los primeros ARENA_RAMP m sube de a poco → escalón natural).
+      if (overArena && ARENA_WALK_Y > floorTarget) {
+        const lift = Math.min(1, arenaEdge / ARENA_RAMP)
+        floorTarget = floorTarget + lift * (ARENA_WALK_Y - floorTarget)
+      }
+
+      // Suavizar el cambio de nivel (evita el tartamudeo al pasar entre pisos):
+      // sube RÁPIDO (no se hunde al pisar algo más alto), baja DESPACIO (no cae de golpe).
+      const k = floorTarget > groundY ? Math.min(1, dt * 8) : Math.min(1, dt * 3)
+      groundY += (floorTarget - groundY) * k
 
       // Próximo tramo: emitido ANTES de que termine el actual (solape) → sin micro-freno.
       // Arranca desde la posición REAL → fluido y sin saltos.
@@ -307,10 +329,11 @@ export function setupMonster(arbolesEntity?: Entity, screenVideo?: Entity) {
         const dzt = target.z - cur.z
         if (Math.sqrt(dxt * dxt + dzt * dzt) < ARRIVE_DIST) { target = randTarget(); avoidDir = 0 }
 
-        // ¿Obstáculo adelante? (ignora árboles → los atraviesa)
+        // ¿Obstáculo adelante? (ignora árboles → los atraviesa). Sobre la arena NO esquiva:
+        // camina derecho POR ARRIBA de los techos (sino zigzaguearía entre edificios).
         let blocked = false
         const frontRes = RaycastResult.getOrNull(front)
-        if (frontRes && frontRes.hits.length > 0) {
+        if (!overArena && frontRes && frontRes.hits.length > 0) {
           for (const h of frontRes.hits) {
             if (h.entityId !== monster &&
                 h.entityId !== back &&

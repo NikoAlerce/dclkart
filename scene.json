@@ -3950,6 +3950,8 @@
   ],
   "allowedMediaHostnames": [
     "ipfs.io",
-    "graffiti-backend-k8qi.onrender.com"
+    "graffiti-backend-k8qi.onrender.com",
+    "localhost",
+    "127.0.0.1"
   ]
 }

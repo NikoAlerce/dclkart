@@ -741,31 +741,49 @@ async function loadModel(filename) {
         })
         flipGroup.add(gltf.scene)
 
-        const entityGroup = new THREE.Group()
-        entityGroup.add(flipGroup)
-
-        const entIdx = ents.findIndex(e => {
-          const entFilename = e.src.split('/').pop()
+        // Find all matching entities for this filename
+        const matchingEnts = ents.map((e, idx) => ({ e, idx })).filter(item => {
+          const entFilename = item.e.src.split('/').pop()
           return entFilename === filename
         })
 
-        if (entIdx !== -1) {
-          const ent = ents[entIdx]
-          // Posición LITERAL — sin negar. Coincide con kartConfig.ts / index.ts / runtime.
-          entityGroup.position.set(ent.position.x, ent.position.y, ent.position.z)
-          if (ent.rotation) {
-            entityGroup.quaternion.set(ent.rotation.x, ent.rotation.y, ent.rotation.z, ent.rotation.w)
-          }
-          if (ent.scale) {
-            entityGroup.scale.set(ent.scale.x, ent.scale.y, ent.scale.z)
-          }
-          entityGroup.userData = {
-            isEntity: true,
-            entityIndex: entIdx,
-            varName: ent.varName,
-            filename: filename
-          }
+        const instances = []
+
+        if (matchingEnts.length > 0) {
+          matchingEnts.forEach(item => {
+            const ent = item.e
+            const entIdx = item.idx
+
+            const clonedFlipGroup = flipGroup.clone()
+            const entityGroup = new THREE.Group()
+            entityGroup.add(clonedFlipGroup)
+
+            // Posición LITERAL — sin negar. Coincide con kartConfig.ts / index.ts / runtime.
+            entityGroup.position.set(ent.position.x, ent.position.y, ent.position.z)
+            if (ent.rotation) {
+              entityGroup.quaternion.set(ent.rotation.x, ent.rotation.y, ent.rotation.z, ent.rotation.w)
+            }
+            if (ent.scale) {
+              entityGroup.scale.set(ent.scale.x, ent.scale.y, ent.scale.z)
+            }
+            entityGroup.userData = {
+              isEntity: true,
+              entityIndex: entIdx,
+              varName: ent.varName,
+              filename: filename
+            }
+
+            scene.add(entityGroup)
+            const bbox = new THREE.Box3().setFromObject(entityGroup)
+            const bboxHelper = new THREE.Box3Helper(bbox, new THREE.Color(0x7c3aed))
+            bboxHelper.visible = showBBox
+            scene.add(bboxHelper)
+
+            instances.push({ root: entityGroup, bbox, bboxHelper, varName: ent.varName })
+          })
         } else {
+          const entityGroup = new THREE.Group()
+          entityGroup.add(flipGroup)
           entityGroup.userData = { filename }
           if (ents.length > 0) {
             const cx = ents.reduce((s,e) => s+e.position.x, 0) / ents.length
@@ -776,16 +794,21 @@ async function loadModel(filename) {
             const row = Math.floor(noEntIdx / 5)
             entityGroup.position.set(cx + (col-2)*5, cy, cz + (row)*5 + 10)
           }
+          scene.add(entityGroup)
+          const bbox = new THREE.Box3().setFromObject(entityGroup)
+          const bboxHelper = new THREE.Box3Helper(bbox, new THREE.Color(0x7c3aed))
+          bboxHelper.visible = showBBox
+          scene.add(bboxHelper)
+
+          instances.push({ root: entityGroup, bbox, bboxHelper, varName: null })
         }
 
-        const root = entityGroup
-        scene.add(root)
-        const bbox = new THREE.Box3().setFromObject(root)
-        const bboxHelper = new THREE.Box3Helper(bbox, new THREE.Color(0x7c3aed))
-        bboxHelper.visible = showBBox
-        scene.add(bboxHelper)
-
-        loaded[filename] = {root, bbox, bboxHelper}
+        loaded[filename] = {
+          root: instances[0].root,
+          bbox: instances[0].bbox,
+          bboxHelper: instances[0].bboxHelper,
+          instances: instances
+        }
         document.getElementById('hmod').textContent = Object.keys(loaded).length
         renderModelList()
         if (Object.keys(loaded).length === 1) focusAll()
@@ -798,13 +821,24 @@ async function loadModel(filename) {
 
 function unloadModel(filename) {
   if (!loaded[filename]) return
-  const {root, bboxHelper} = loaded[filename]
+  const data = loaded[filename]
   
-  if (selectedObjects.includes(root)) {
-    clearSelection()
+  if (data.instances) {
+    data.instances.forEach(inst => {
+      if (selectedObjects.includes(inst.root)) {
+        clearSelection()
+      }
+      scene.remove(inst.root)
+      scene.remove(inst.bboxHelper)
+    })
+  } else {
+    if (selectedObjects.includes(data.root)) {
+      clearSelection()
+    }
+    scene.remove(data.root)
+    scene.remove(data.bboxHelper)
   }
   
-  scene.remove(root); scene.remove(bboxHelper)
   delete loaded[filename]
   document.getElementById('hmod').textContent = Object.keys(loaded).length
   renderModelList()
@@ -861,13 +895,15 @@ function liveMove(i) {
   const x = parseFloat(document.getElementById(`ex-${i}`).value)||0
   const y = parseFloat(document.getElementById(`ey-${i}`).value)||0
   const z = parseFloat(document.getElementById(`ez-${i}`).value)||0
-  const {root, bboxHelper} = loaded[key]
+  const data = loaded[key]
+  const inst = data.instances ? data.instances.find(inst => inst.varName === ent.varName) : data
+  if (!inst) return
   
-  root.position.set(x, y, z)
-  const nb = new THREE.Box3().setFromObject(root)
-  bboxHelper.box.copy(nb)
+  inst.root.position.set(x, y, z)
+  const nb = new THREE.Box3().setFromObject(inst.root)
+  inst.bboxHelper.box.copy(nb)
   
-  if (selectedObjects.includes(root)) {
+  if (selectedObjects.includes(inst.root)) {
     updateGizmo()
   }
 }
@@ -890,19 +926,23 @@ async function saveEnt(i) {
   const basename = ent.src.split('/').pop()
   const key = Object.keys(loaded).find(k => k === basename)
   if (key) {
-    const { root } = loaded[key]
-    const worldRot = new THREE.Quaternion()
-    root.getWorldQuaternion(worldRot)
-    rx = parseFloat(worldRot.x.toFixed(4))
-    ry = parseFloat(worldRot.y.toFixed(4))
-    rz = parseFloat(worldRot.z.toFixed(4))
-    rw = parseFloat(worldRot.w.toFixed(4))
-    
-    const worldScale = new THREE.Vector3()
-    root.getWorldScale(worldScale)
-    sx = parseFloat(worldScale.x.toFixed(3))
-    sy = parseFloat(worldScale.y.toFixed(3))
-    sz = parseFloat(worldScale.z.toFixed(3))
+    const data = loaded[key]
+    const inst = data.instances ? data.instances.find(inst => inst.varName === ent.varName) : data
+    if (inst) {
+      const root = inst.root
+      const worldRot = new THREE.Quaternion()
+      root.getWorldQuaternion(worldRot)
+      rx = parseFloat(worldRot.x.toFixed(4))
+      ry = parseFloat(worldRot.y.toFixed(4))
+      rz = parseFloat(worldRot.z.toFixed(4))
+      rw = parseFloat(worldRot.w.toFixed(4))
+      
+      const worldScale = new THREE.Vector3()
+      root.getWorldScale(worldScale)
+      sx = parseFloat(worldScale.x.toFixed(3))
+      sy = parseFloat(worldScale.y.toFixed(3))
+      sz = parseFloat(worldScale.z.toFixed(3))
+    }
   }
 
   try {
@@ -929,11 +969,15 @@ function focusEnt(i) {
   const key = Object.keys(loaded).find(k => k === basename)
   if (!key) { toast('Cargá el modelo primero', 'err'); return }
   
-  const obj = loaded[key].root
+  const data = loaded[key]
+  const inst = data.instances ? data.instances.find(inst => inst.varName === ent.varName) : data
+  if (!inst) return
+  
+  const obj = inst.root
   selectObject(obj, false)
   
   const sphere = new THREE.Sphere()
-  loaded[key].bbox.getBoundingSphere(sphere)
+  inst.bbox.getBoundingSphere(sphere)
   const d = Math.max(sphere.radius*2.5, 30)
   const t = sphere.center
   ctrl.target.set(t.x, t.y, t.z)
@@ -961,8 +1005,13 @@ function updateGizmoPositionsUI() {
     
     const filename = obj.userData.filename
     if (loaded[filename]) {
-      const nb = new THREE.Box3().setFromObject(obj)
-      loaded[filename].bboxHelper.box.copy(nb)
+      const data = loaded[filename]
+      const inst = data.instances ? data.instances.find(inst => inst.root === obj) : data
+      if (inst) {
+        const nb = new THREE.Box3().setFromObject(obj)
+        inst.bbox.copy(nb)
+        inst.bboxHelper.box.copy(nb)
+      }
     }
   })
 }
@@ -1056,19 +1105,36 @@ function toggleGrid() {
 }
 function toggleBBox() {
   showBBox = !showBBox
-  Object.values(loaded).forEach(m => m.bboxHelper.visible = showBBox)
+  Object.values(loaded).forEach(data => {
+    if (data.instances) {
+      data.instances.forEach(inst => inst.bboxHelper.visible = showBBox)
+    } else {
+      data.bboxHelper.visible = showBBox
+    }
+  })
   document.getElementById('tb-bbox').classList.toggle('on')
 }
 function toggleWire() {
   showWire = !showWire
-  Object.values(loaded).forEach(m => m.root.traverse(n => { if(n.isMesh) n.material.wireframe = showWire }))
+  Object.values(loaded).forEach(data => {
+    const roots = data.instances ? data.instances.map(inst => inst.root) : [data.root]
+    roots.forEach(root => {
+      root.traverse(n => { if(n.isMesh) n.material.wireframe = showWire })
+    })
+  })
   document.getElementById('tb-wire').classList.toggle('on')
 }
 function focusAll() {
   const ms = Object.values(loaded)
   if (!ms.length) return
   const all = new THREE.Box3()
-  ms.forEach(m => all.union(m.bbox))
+  ms.forEach(data => {
+    if (data.instances) {
+      data.instances.forEach(inst => all.union(inst.bbox))
+    } else {
+      all.union(data.bbox)
+    }
+  })
   const c = new THREE.Vector3(); all.getCenter(c)
   const s = new THREE.Vector3(); all.getSize(s)
   const d = Math.max(s.length()*.8, 50)

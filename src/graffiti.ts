@@ -44,11 +44,6 @@ const GraffitiData = engine.defineComponent('graffitiData', {
 type Slot = { root: Entity; visual: Entity; lastSeq: number; lastActive: boolean }
 const slots: Slot[] = []
 
-// Hook: avisar cuando el jugador LOCAL pinta un punto (lo usa el side-game "Tag the City").
-type PaintListener = (x: number, y: number, z: number) => void
-const paintListeners: PaintListener[] = []
-export function onGraffitiPaint(cb: PaintListener) { paintListeners.push(cb) }
-
 type PaintMsg = { x: number; y: number; z: number; nx: number; ny: number; nz: number; r: number; g: number; b: number; brush: number; size: number; author: string; grow?: boolean }
 type EraseMsg = { x: number; y: number; z: number; r: number }
 
@@ -259,25 +254,27 @@ function graffitiSystem(dt: number) {
       const p = Vector3.create(hit.position.x, hit.position.y, hit.position.z)
       const n = hit.normalHit
       const base = GRAFFITI_SIZES[GraffitiState.selectedSize] || 1.0
-      const spacing = base * 0.35   // las manchas se solapan (=trazo continuo) pero con menos puntos → más graffiti antes de reciclar
+      const spacing = base * 0.15   // trazo más continuo y suave como pidió el usuario
       const author = getPlayer()?.name || 'anon'
 
       // Coloca UNA mancha en (px,py,pz) con la normal actual.
       const emitDot = (px: number, py: number, pz: number) => {
-        if (GraffitiState.eraser) {
-          graffitiBus.emit('gErase', { x: px, y: py, z: pz, r: base })
-          return
-        }
-        const c = strokeColor()
-        // Si caés sobre un PANEL pintable → va al backend (persistente entre sesiones,
-        // liviano). Si no, calco en-sesión (como antes) para "pintar en cualquier lado".
         const panel = panelHitUV(Vector3.create(px, py, pz))
         if (panel) {
-          paintPanel(panel.id, panel.u, panel.v, c, base)
+          if (GraffitiState.eraser) {
+            paintPanel(panel.id, panel.u, panel.v, { r: 0, g: 0, b: 0 }, base, GraffitiState.selectedBrush, true)
+          } else {
+            const c = strokeColor()
+            paintPanel(panel.id, panel.u, panel.v, c, base, GraffitiState.selectedBrush, false)
+          }
         } else {
-          graffitiBus.emit('gPaint', { x: px, y: py, z: pz, nx: n.x, ny: n.y, nz: n.z, r: c.r, g: c.g, b: c.b, brush: GraffitiState.selectedBrush, size: base, author })
+          if (GraffitiState.eraser) {
+            graffitiBus.emit('gErase', { x: px, y: py, z: pz, r: base })
+          } else {
+            const c = strokeColor()
+            graffitiBus.emit('gPaint', { x: px, y: py, z: pz, nx: n.x, ny: n.y, nz: n.z, r: c.r, g: c.g, b: c.b, brush: GraffitiState.selectedBrush, size: base, author })
+          }
         }
-        for (const l of paintListeners) l(px, py, pz)
       }
 
       const moved = !lastDotPos || Vector3.distance(p, lastDotPos) >= spacing
@@ -302,11 +299,17 @@ function graffitiSystem(dt: number) {
         if (growAccum > 0.1) {
           growAccum = 0
           const grown = base * Math.min(2.5, 1 + stillTime * 0.7)
-          graffitiBus.emit('gPaint', {
-            x: hit.position.x, y: hit.position.y, z: hit.position.z,
-            nx: hit.normalHit.x, ny: hit.normalHit.y, nz: hit.normalHit.z,
-            r: 1, g: 1, b: 1, brush: GraffitiState.selectedBrush, size: grown, author, grow: true
-          })
+          const c = strokeColor()
+          const panel = panelHitUV(Vector3.create(hit.position.x, hit.position.y, hit.position.z))
+          if (panel) {
+            paintPanel(panel.id, panel.u, panel.v, c, grown, GraffitiState.selectedBrush, false)
+          } else {
+            graffitiBus.emit('gPaint', {
+              x: hit.position.x, y: hit.position.y, z: hit.position.z,
+              nx: hit.normalHit.x, ny: hit.normalHit.y, nz: hit.normalHit.z,
+              r: c.r, g: c.g, b: c.b, brush: GraffitiState.selectedBrush, size: grown, author, grow: true
+            })
+          }
         }
       }
     } else {

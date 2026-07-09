@@ -15,7 +15,6 @@ import { Playlist } from './playlist'
 import { setupPaintball } from './paintball'
 import { setupGraffiti } from './graffiti'
 import { setupGraffitiPanels } from './graffitiPanels'
-import { setupGraffitiMission } from './graffitiMission'
 import { setupNet } from './net'
 
 
@@ -122,9 +121,9 @@ export function main() {
     visibleMeshesCollisionMask:   ColliderLayer.CL_PHYSICS | ColliderLayer.CL_POINTER
   })
   Transform.create(couch1, {
-    position: Vector3.create(-212.22, 15.91, 113.59),
-    rotation: Quaternion.create(0.0000, -0.5869, 0.0000, 0.8096),
-    scale: Vector3.create(6.308, 6.308, 6.308)
+    position: Vector3.create(-227.27, 18.76, 119.13),
+    rotation: Quaternion.create(0.0000, -0.5674, 0.0000, 0.8234),
+    scale: Vector3.create(13.259, 13.259, 13.259)
   })
   Transform.getMutable(couch1).position.y += WORLD_Y_OFFSET
   
@@ -161,9 +160,9 @@ export function main() {
     visibleMeshesCollisionMask:   ColliderLayer.CL_PHYSICS | ColliderLayer.CL_POINTER
   })
   Transform.create(couch2, {
-    position: Vector3.create(-220.04, 17.13, 101.73),
-    rotation: Quaternion.create(0.0000, -0.4530, 0.0000, 0.8915),
-    scale: Vector3.create(3.946, 3.946, 3.946)
+    position: Vector3.create(-222.64, 19.21, 139.68),
+    rotation: Quaternion.create(0.0000, -0.8193, 0.0000, 0.5734),
+    scale: Vector3.create(6.996, 6.996, 6.996)
   })
   Transform.getMutable(couch2).position.y += WORLD_Y_OFFSET
   
@@ -174,6 +173,44 @@ export function main() {
     },
     function () {
       const pos = Transform.get(couch2).position
+      movePlayerTo({
+        newRelativePosition: Vector3.create(pos.x, pos.y + 0.5, pos.z)
+      }).then(() => {
+        let timer = 0
+        const emoteSystem = (dt: number) => {
+          timer += dt
+          if (timer >= 0.5) {
+            triggerEmote({ predefinedEmote: 'sit' }).catch(() => {})
+            engine.removeSystem(emoteSystem)
+          }
+        }
+        engine.addSystem(emoteSystem)
+      }).catch(() => {})
+    }
+  )
+
+  // 1.6.4 Couch 3 (Copia de Couch 2 - Sillon de 1 cuerpo)
+  const couch3 = engine.addEntity()
+  spawnedModelEntities.add(couch3)
+  GltfContainer.create(couch3, {
+    src: 'assets/models/couch2.glb',
+    invisibleMeshesCollisionMask: ColliderLayer.CL_PHYSICS,
+    visibleMeshesCollisionMask:   ColliderLayer.CL_PHYSICS | ColliderLayer.CL_POINTER
+  })
+  Transform.create(couch3, {
+    position: Vector3.create(-234.29, 19.53, 99.08),
+    rotation: Quaternion.create(0.0000, -0.4530, 0.0000, 0.8915),
+    scale: Vector3.create(7.328, 7.329, 7.328)
+  })
+  Transform.getMutable(couch3).position.y += WORLD_Y_OFFSET
+  
+  pointerEventsSystem.onPointerDown(
+    {
+      entity: couch3,
+      opts: { button: InputAction.IA_POINTER, hoverText: 'Sentarse' }
+    },
+    function () {
+      const pos = Transform.get(couch3).position
       movePlayerTo({
         newRelativePosition: Vector3.create(pos.x, pos.y + 0.5, pos.z)
       }).then(() => {
@@ -206,8 +243,8 @@ export function main() {
     visibleMeshesCollisionMask:   ColliderLayer.CL_PHYSICS
   })
   Transform.create(screenEntity, {
-    position: Vector3.create(-275.56, 13.68, 140.93),
-    rotation: Quaternion.create(0.0000, -0.5451, 0.0000, 0.8384),
+    position: Vector3.create(-281.33, 13.68, 136.56),
+    rotation: Quaternion.create(0.0000, -0.5652, 0.0000, 0.8250),
     scale: Vector3.create(106.967, 106.968, 106.967)
   })
   Transform.getMutable(screenEntity).position.y += WORLD_Y_OFFSET
@@ -690,8 +727,6 @@ export function main() {
   // 8.5 Graffiti / Aerosol: pintar en cualquier superficie, sincronizado (v1 en-sesión, FIFO).
   setupGraffitiPanels() // paredes pintables persistentes (backend PNG) — antes de setupGraffiti
   setupGraffiti()
-  // 8.6 Side-game "Tag the City": NPC cerca del spawn → misión de taguear spots en el dust.
-  setupGraffitiMission()
 
   // 7. Montado en el lomo: el avatar deja de colisionar con los árboles Y con el track
   // (que incluye los EDIFICIOS de la arena). El monstruo los atraviesa; así el rider también

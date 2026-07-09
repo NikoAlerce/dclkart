@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Lienzo de Graffiti — nikoalerce.dcl.eth</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-base: #0c0810;
+      --bg-panel: rgba(20, 15, 26, 0.85);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --accent: #ff52f3;
+      --accent-glow: rgba(255, 82, 243, 0.4);
+      --text: #f3ecf7;
+      --text-muted: rgba(243, 236, 247, 0.6);
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg-base);
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      overflow: hidden;
+      display: flex;
+      height: 100vh;
+      user-select: none;
+    }
+    /* Sidebar */
+    .sidebar {
+      width: 300px;
+      background: var(--bg-panel);
+      backdrop-filter: blur(16px);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      padding: 24px;
+      box-sizing: border-box;
+      z-index: 10;
+      box-shadow: 10px 0 30px rgba(0, 0, 0, 0.5);
+    }
+    .header {
+      margin-bottom: 24px;
+    }
+    h1 {
+      font-size: 22px;
+      font-weight: 700;
+      margin: 0 0 4px 0;
+      color: var(--accent);
+      text-shadow: 0 0 10px var(--accent-glow);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin: 0;
+    }
+    .tool-section {
+      margin-bottom: 24px;
+    }
+    .section-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      font-weight: 600;
+    }
+    /* Colors Grid */
+    .colors-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+    }
+    .color-btn {
+      aspect-ratio: 1;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      cursor: pointer;
+      position: relative;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .color-btn:hover {
+      transform: scale(1.15);
+    }
+    .color-btn.active {
+      border-color: #ffffff;
+      box-shadow: 0 0 12px rgba(255, 255, 255, 0.4);
+    }
+    /* Tools Buttons */
+    .tool-row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .btn {
+      flex: 1;
+      padding: 10px 14px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-color);
+      color: var(--text);
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .btn:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+    .btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      box-shadow: 0 0 15px var(--accent-glow);
+    }
+    .btn-danger {
+      background: rgba(242, 38, 38, 0.15);
+      border-color: rgba(242, 38, 38, 0.3);
+      color: #ff6b6b;
+    }
+    .btn-danger:hover {
+      background: rgba(242, 38, 38, 0.3);
+    }
+    .btn-primary {
+      background: #8930ab;
+      border-color: #8930ab;
+      padding: 14px;
+      font-size: 14px;
+      margin-top: auto;
+    }
+    .btn-primary:hover {
+      background: #a23fc9;
+    }
+    /* Size Slider */
+    .slider-container {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: rgba(255, 255, 255, 0.02);
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+    }
+    .slider-container input {
+      flex: 1;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+    .slider-val {
+      font-size: 14px;
+      font-weight: 600;
+      width: 45px;
+      text-align: right;
+    }
+    /* Viewport */
+    .viewport {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background: #0d0a0f;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    /* Zoom/Pan Wrapper */
+    #canvas-container {
+      position: absolute;
+      transform-origin: center center;
+      transition: transform 0.05s ease-out;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    canvas {
+      display: block;
+    }
+    /* HUD overlay instructions */
+    .hud-info {
+      position: absolute;
+      bottom: 24px;
+      right: 24px;
+      background: rgba(12, 8, 16, 0.8);
+      backdrop-filter: blur(8px);
+      padding: 12px 18px;
+      border-radius: 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+      border: 1px solid var(--border-color);
+      pointer-events: none;
+      line-height: 1.6;
+    }
+    .hud-title {
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      font-size: 10px;
+      letter-spacing: 0.5px;
+    }
+    /* Zoom Controls Overlay */
+    .zoom-overlay {
+      position: absolute;
+      top: 24px;
+      right: 24px;
+      display: flex;
+      gap: 6px;
+      background: rgba(12, 8, 16, 0.8);
+      backdrop-filter: blur(8px);
+      padding: 6px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      z-index: 5;
+    }
+    .zoom-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      font-weight: 700;
+      transition: background 0.2s;
+    }
+    .zoom-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="sidebar">
+    <div class="header">
+      <h1 id="panel-name">Pared de Graffiti</h1>
+      <p class="subtitle">Lienzo 2D de alta precisión</p>
+    </div>
+
+    <div class="tool-section">
+      <div class="section-title">Herramienta</div>
+      <div class="tool-row">
+        <button class="btn active" id="tool-brush">🎨 Pincel</button>
+        <button class="btn" id="tool-pan">🖐️ Desplazar</button>
+      </div>
+      <div class="tool-row">
+        <button class="btn" id="tool-eraser">🧽 Borrador</button>
+      </div>
+    </div>
+
+    <div class="tool-section">
+      <div class="section-title">Paleta de Colores</div>
+      <div class="colors-grid" id="colors-container"></div>
+    </div>
+
+    <div class="tool-section">
+      <div class="section-title">Tamaño de Pincel</div>
+      <div class="slider-container">
+        <input type="range" id="size-slider" min="0.2" max="5.0" step="0.1" value="1.0">
+        <span class="slider-val" id="size-val">1.0 m</span>
+      </div>
+    </div>
+
+    <div class="tool-section">
+      <div class="section-title">Acciones</div>
+      <button class="btn btn-danger" id="btn-clear">🗑️ Limpiar Todo</button>
+    </div>
+
+    <button class="btn btn-primary" id="btn-save">💾 Aplicar y Volver</button>
+  </div>
+
+  <div class="viewport" id="viewport">
+    <div class="zoom-overlay">
+      <button class="zoom-btn" id="zoom-in">+</button>
+      <button class="zoom-btn" id="zoom-out">-</button>
+      <button class="zoom-btn" id="zoom-reset">↺</button>
+    </div>
+
+    <div id="canvas-container">
+      <canvas id="paint-canvas"></canvas>
+    </div>
+
+    <div class="hud-info">
+      <div class="hud-title">Controles del Lienzo</div>
+      • Clic izquierdo para pintar<br>
+      • Rueda del mouse para hacer Zoom<br>
+      • Clic derecho y arrastrar para moverte
+    </div>
+  </div>
+
+  <script>
+    // Parámetros de configuración
+    const API_BASE = window.location.origin;
+    const params = new URLSearchParams(window.location.search);
+    const panelId = params.get('panel') || 'wallA';
+    
+    document.getElementById('panel-name').textContent = "Pared " + panelId.replace('wall', '');
+
+    // Paleta de colores idéntica a Decentraland
+    const presets = [
+      { r: 0.95, g: 0.15, b: 0.15, hex: '#f22626' }, // Rojo
+      { r: 0.15, g: 0.85, b: 0.15, hex: '#26d926' }, // Verde
+      { r: 0.15, g: 0.15, b: 0.95, hex: '#2626f2' }, // Azul
+      { r: 0.95, g: 0.95, b: 0.15, hex: '#f2f226' }, // Amarillo
+      { r: 0.95, g: 0.15, b: 0.95, hex: '#f226f2' }, // Rosa
+      { r: 0.15, g: 0.95, b: 0.95, hex: '#26f2f2' }, // Cian
+      { r: 0.95, g: 0.55, b: 0.15, hex: '#f28c26' }, // Naranja
+      { r: 0.55, g: 0.15, b: 0.95, hex: '#8c26f2' }, // Violeta
+      { r: 0.95, g: 0.95, b: 0.95, hex: '#f2f2f2' }, // Blanco
+      { r: 0.08, g: 0.08, b: 0.08, hex: '#141414' }  // Negro
+    ];
+
+    // Cargar colores en la UI
+    const colorsContainer = document.getElementById('colors-container');
+    let selectedColor = presets[0];
+
+    presets.forEach((p, idx) => {
+      const btn = document.createElement('button');
+      btn.className = 'color-btn' + (idx === 0 ? ' active' : '');
+      btn.style.background = p.hex;
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        selectedColor = p;
+        if (activeTool === 'eraser') selectTool('brush');
+      });
+      colorsContainer.appendChild(btn);
+    });
+
+    // Resoluciones
+    const resolutions = {
+      wallA: { w: 1024, h: 512, realW: 31.755 },
+      wallB: { w: 1024, h: 512, realW: 31.455 },
+      wallC: { w: 1024, h: 1024, realW: 31.688 }
+    };
+    const currentRes = resolutions[panelId] || resolutions.wallA;
+
+    // Elementos del lienzo
+    const canvas = document.getElementById('paint-canvas');
+    const ctx = canvas.getContext('2d');
+    const container = document.getElementById('canvas-container');
+    const viewport = document.getElementById('viewport');
+
+    canvas.width = currentRes.w;
+    canvas.height = currentRes.h;
+
+    // Estado del pincel
+    let activeTool = 'brush'; // brush, pan, eraser
+    let brushSize = 1.0; // en metros
+    let isDrawing = false;
+    let lastX = 0, lastY = 0;
+
+    // Estado de la transformación (Zoom y Pan)
+    let zoom = 1.0;
+    let panX = 0;
+    let panY = 0;
+    let isPanning = false;
+    let panStartX = 0;
+    let panStartY = 0;
+
+    // Cola de manchas para enviar en batch
+    let pendingDabs = [];
+
+    // Ajustar zoom inicial para centrar y encajar la pared en pantalla
+    function initView() {
+      const vw = viewport.clientWidth - 40;
+      const vh = viewport.clientHeight - 40;
+      const scaleX = vw / canvas.width;
+      const scaleY = vh / canvas.height;
+      zoom = Math.min(scaleX, scaleY, 1.2);
+      panX = 0;
+      panY = 0;
+      updateTransform();
+    }
+
+    function updateTransform() {
+      container.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+    }
+
+    // Herramientas
+    function selectTool(tool) {
+      activeTool = tool;
+      document.getElementById('tool-brush').classList.toggle('active', tool === 'brush');
+      document.getElementById('tool-pan').classList.toggle('active', tool === 'pan');
+      document.getElementById('tool-eraser').classList.toggle('active', tool === 'eraser');
+      viewport.style.cursor = tool === 'pan' ? 'grab' : 'crosshair';
+    }
+
+    document.getElementById('tool-brush').onclick = () => selectTool('brush');
+    document.getElementById('tool-pan').onclick = () => selectTool('pan');
+    document.getElementById('tool-eraser').onclick = () => selectTool('eraser');
+
+    // Desplazamiento y Zoom con mouse
+    viewport.addEventListener('mousedown', (e) => {
+      if (activeTool === 'pan' || e.button === 2 || e.button === 1) {
+        isPanning = true;
+        panStartX = e.clientX - panX;
+        panStartY = e.clientY - panY;
+        viewport.style.cursor = 'grabbing';
+        e.preventDefault();
+      }
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (isPanning) {
+        panX = e.clientX - panStartX;
+        panY = e.clientY - panStartY;
+        updateTransform();
+      }
+    });
+
+    window.addEventListener('mouseup', (e) => {
+      if (isPanning) {
+        isPanning = false;
+        viewport.style.cursor = activeTool === 'pan' ? 'grab' : 'crosshair';
+      }
+    });
+
+    // Zoom con rueda
+    viewport.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const zoomFactor = 1.1;
+      const oldZoom = zoom;
+      if (e.deltaY < 0) {
+        zoom = Math.min(6, zoom * zoomFactor);
+      } else {
+        zoom = Math.max(0.3, zoom / zoomFactor);
+      }
+      
+      // Zoom centrado en el puntero del mouse
+      const rect = container.getBoundingClientRect();
+      const mouseX = e.clientX - viewport.offsetLeft;
+      const mouseY = e.clientY - viewport.offsetTop;
+      
+      // Ajustar pan para mantener la posición del cursor fija sobre el canvas
+      const canvasX = (mouseX - rect.left) / oldZoom;
+      const canvasY = (mouseY - rect.top) / oldZoom;
+      
+      panX = mouseX - canvasX * zoom - (canvas.width * zoom) / 2 + (canvas.width * zoom) / 2;
+      panY = mouseY - canvasY * zoom - (canvas.height * zoom) / 2 + (canvas.height * zoom) / 2;
+      
+      // Ajuste simplificado
+      const dx = mouseX - (rect.left + rect.width / 2);
+      const dy = mouseY - (rect.top + rect.height / 2);
+      
+      panX += dx * (1 - zoom / oldZoom);
+      panY += dy * (1 - zoom / oldZoom);
+      
+      updateTransform();
+    }, { passive: false });
+
+    // Controles de zoom
+    document.getElementById('zoom-in').onclick = () => { zoom = Math.min(6, zoom * 1.2); updateTransform(); };
+    document.getElementById('zoom-out').onclick = () => { zoom = Math.max(0.3, zoom / 1.2); updateTransform(); };
+    document.getElementById('zoom-reset').onclick = () => initView();
+
+    // Slider de Tamaño
+    const sizeSlider = document.getElementById('size-slider');
+    const sizeVal = document.getElementById('size-val');
+    sizeSlider.oninput = (e) => {
+      brushSize = parseFloat(e.target.value);
+      sizeVal.textContent = brushSize.toFixed(1) + " m";
+    };
+
+    // Mapeo de coordenadas
+    function getCanvasCoords(e) {
+      const rect = canvas.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      const x = (clientX - rect.left) * (canvas.width / rect.width);
+      const y = (clientY - rect.top) * (canvas.height / rect.height);
+      return {
+        u: x / canvas.width,
+        v: 1 - (y / canvas.height)
+      };
+    }
+
+    // Dibujado local
+    function drawDabLocal(d) {
+      const x = d.u * canvas.width;
+      const y = (1 - d.v) * canvas.height;
+      const radius = Math.max(2, d.size * canvas.width);
+      
+      if (d.eraser) {
+        ctx.globalCompositeOperation = 'destination-out';
+        const g = ctx.createRadialGradient(x, y, 0, x, y, radius);
+        g.addColorStop(0, 'rgba(0,0,0,1)');
+        g.addColorStop(0.65, 'rgba(0,0,0,0.5)');
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g;
+      } else {
+        ctx.globalCompositeOperation = 'source-over';
+        const c = `${Math.round(d.r * 255)},${Math.round(d.g * 255)},${Math.round(d.b * 255)}`;
+        const g = ctx.createRadialGradient(x, y, 0, x, y, radius);
+        g.addColorStop(0, `rgba(${c},0.95)`);
+        g.addColorStop(0.65, `rgba(${c},0.55)`);
+        g.addColorStop(1, `rgba(${c},0)`);
+        ctx.fillStyle = g;
+      }
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    // Eventos de Dibujado
+    canvas.addEventListener('mousedown', (e) => {
+      if (e.button === 0 && activeTool !== 'pan') {
+        isDrawing = true;
+        const coords = getCanvasCoords(e);
+        lastX = coords.u;
+        lastY = coords.v;
+        paintAt(coords.u, coords.v);
+      }
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isDrawing) return;
+      const coords = getCanvasCoords(e);
+      interpolatePaint(lastX, lastY, coords.u, coords.v);
+      lastX = coords.u;
+      lastY = coords.v;
+    });
+
+    window.addEventListener('mouseup', () => {
+      isDrawing = false;
+    });
+
+    // Soporte táctil
+    canvas.addEventListener('touchstart', (e) => {
+      if (activeTool !== 'pan') {
+        isDrawing = true;
+        const coords = getCanvasCoords(e);
+        lastX = coords.u;
+        lastY = coords.v;
+        paintAt(coords.u, coords.v);
+        e.preventDefault();
+      }
+    });
+
+    canvas.addEventListener('touchmove', (e) => {
+      if (!isDrawing) return;
+      const coords = getCanvasCoords(e);
+      interpolatePaint(lastX, lastY, coords.u, coords.v);
+      lastX = coords.u;
+      lastY = coords.v;
+      e.preventDefault();
+    });
+
+    canvas.addEventListener('touchend', () => {
+      isDrawing = false;
+    });
+
+    function paintAt(u, v) {
+      const sizeFrac = brushSize / currentRes.realW;
+      const eraserMode = (activeTool === 'eraser');
+      const dab = {
+        u: u,
+        v: v,
+        r: eraserMode ? 0 : selectedColor.r,
+        g: eraserMode ? 0 : selectedColor.g,
+        b: eraserMode ? 0 : selectedColor.b,
+        size: sizeFrac,
+        eraser: eraserMode
+      };
+      
+      drawDabLocal(dab);
+      pendingDabs.push(dab);
+    }
+
+    // Interpolar para evitar el "punteado" al mover rápido
+    function interpolatePaint(u1, v1, u2, v2) {
+      const dxPx = (u2 - u1) * canvas.width;
+      const dyPx = (v2 - v1) * canvas.height;
+      const distPx = Math.sqrt(dxPx * dxPx + dyPx * dyPx);
+      
+      const stepSize = Math.max(1, brushSize * 0.15 * (canvas.width / currentRes.realW));
+      const steps = Math.min(100, Math.floor(distPx / stepSize));
+      
+      paintAt(u2, v2);
+      if (steps > 1) {
+        for (let i = 1; i < steps; i++) {
+          const t = i / steps;
+          paintAt(u1 + (u2 - u1) * t, v1 + (v2 - v1) * t);
+        }
+      }
+    }
+
+    // Enviar periódicamente las manchas al servidor en batches (cada 80ms)
+    setInterval(() => {
+      if (pendingDabs.length === 0) return;
+      const dabs = pendingDabs.splice(0, pendingDabs.length);
+      
+      fetch(`${API_BASE}/dabs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ panel: panelId, dabs })
+      })
+      .then(r => r.json())
+      .catch(err => console.error("Error al guardar dabs:", err));
+    }, 80);
+
+    // Cargar manchas previas
+    function loadPrevious() {
+      fetch(`${API_BASE}/dabs/${panelId}`)
+        .then(r => r.json())
+        .then(data => {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          const list = data.dabs || [];
+          list.forEach(d => drawDabLocal(d));
+        })
+        .catch(err => console.error("Error cargando dabs iniciales:", err));
+    }
+
+    // Botón de borrar todo
+    document.getElementById('btn-clear').onclick = () => {
+      if (confirm('¿Seguro que quieres borrar todo este panel?')) {
+        fetch(`${API_BASE}/clear`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ panel: panelId })
+        })
+        .then(r => r.json())
+        .then(() => {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+        });
+      }
+    };
+
+    // Botón de guardar y volver
+    document.getElementById('btn-save').onclick = () => {
+      alert("¡Cambios aplicados! Vuelve a Decentraland y verás tu graffiti en unos segundos.");
+      window.close();
+    };
+
+    // Inicializar
+    window.onload = () => {
+      initView();
+      loadPrevious();
+    };
+    window.onresize = () => initView();
+    viewport.addEventListener('contextmenu', e => e.preventDefault());
+  </script>
+</body>
+</html>
